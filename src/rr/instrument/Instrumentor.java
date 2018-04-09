@@ -39,9 +39,11 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 package rr.instrument;
 
 import java.io.File;
+import java.io.PrintWriter;
 import java.util.Set;
 import java.util.Vector;
 
+import rr.instrument.analysis.TraceClassVisitor;
 import rr.org.objectweb.asm.ClassReader;
 import rr.org.objectweb.asm.ClassVisitor;
 import rr.org.objectweb.asm.ClassWriter;
@@ -192,7 +194,8 @@ public class Instrumentor {
 
 
 			if ((cr.getAccess() & (Opcodes.ACC_INTERFACE)) == 0) {
-
+//				ClassVisitor myCV = new TraceClassVisitor(cv0, new PrintWriter(cr.getClassName() + ".log"));
+//				ClassVisitor cv1 = new NativeMethodSanityChecker(myCV);
 				ClassVisitor cv1 = new NativeMethodSanityChecker(cv0);
 				cv1 = new GuardStateInserter(cv1);
 				cv1 = new InterruptFixer(cv1);
@@ -208,7 +211,6 @@ public class Instrumentor {
 				ClassVisitor cv2 = new ThreadDataThunkInserter(cv1, true);
 				ClassVisitor cv2forThunks = new ThreadDataThunkInserter(cv1, false);
 				ClassVisitor cv = new SyncAndMethodThunkInserter(cv2, cv2forThunks);
-
 				// (*) cv = insertToolSpecificVisitors(cv); 
 				
 				
