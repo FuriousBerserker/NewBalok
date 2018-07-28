@@ -5,7 +5,6 @@ import acme.util.option.CommandLine;
 import balok.causality.AccessMode;
 import balok.causality.PtpCausalityFactory;
 import balok.causality.async.ShadowMemory;
-import javafx.scene.effect.Shadow;
 import org.jctools.queues.MpscUnboundedArrayQueue;
 import rr.annotations.Abbrev;
 import rr.barrier.BarrierEvent;
