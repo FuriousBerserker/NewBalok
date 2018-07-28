@@ -98,7 +98,7 @@ Running all Benchmarks
 You can run all benchmarks and gather average running times with a
 command like the following.  
 
-./TEST_BMS all FastTrack2 -tool=FT2 -quiet -maxWarn=1
+./TEST_BMS [number of iterations] all FastTrack2 -tool=FT2 -quiet -maxWarn=1
 
 It will generate the summary file FastTrack2.csv.  Individual log
 files file be in the log subdirectory with obvious names.

@@ -54,6 +54,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 	<property name="java.home" value="$$JAVA_HOME" />
 	<property name="cup.jar" value="${rr.basedir}/jars/java-cup-11a.jar" />
 	<property name="jflex.jar" value="${rr.basedir}/jars/JFlex.jar" />
+	<property name="balok.jar" value="${rr.basedir}/jars/balok-1.0-dev-all-deps.jar" />
+        <property name="jctools.jar" value="${rr.basedir}/jars/jctools-core-2.2-SNAPSHOT.jar" />
 	<property name="rr.vmargs" value="-javaagent:${jar.dir}/rragent.jar $$JVM_ARGS" />
 
 	<property name="rr.main" value="rr.RRMain" />
@@ -62,6 +64,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 	<path id="rr.classpath">
 		<pathelement location="${classes.dir}" />
 		<pathelement location="${cup.jar}" />
+		<pathelement location="${balok.jar}" />
+                <pathelement location="${jctools.jar}" />
 	</path>
 
 	<path id="rr.classpath.jar">
@@ -207,6 +211,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 		<jar destfile="${jar.dir}/ClassLoaderWithListener.jar" basedir="${classes.dir}"/>
 	</target>
 
-	<target name="clean-build" depends="clean,wc,compile,jar,agent,javadoc" />
+	<!--<target name="clean-build" depends="clean,wc,compile,jar,agent,javadoc" />-->
+
+	<target name="clean-build" depends="clean,wc,compile,jar,agent" />
 
 </project>

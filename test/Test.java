@@ -59,6 +59,7 @@ public class Test extends Thread{
 		final Test t1 = new Test();
 		final Test t2 = new Test();
 		t1.start();
+                //y++;
 		t2.start();
 		t1.join();
 		t2.join();

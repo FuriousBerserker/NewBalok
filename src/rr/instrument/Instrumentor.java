@@ -118,7 +118,7 @@ public class Instrumentor {
 				}
 			});
 
-
+// instrumented java applcation -- important!
 	public static synchronized ClassWriter instrument(final LoaderContext loader, ClassReader cr) {
 		long start = insTime.start();
 
@@ -194,9 +194,9 @@ public class Instrumentor {
 
 
 			if ((cr.getAccess() & (Opcodes.ACC_INTERFACE)) == 0) {
-//				ClassVisitor myCV = new TraceClassVisitor(cv0, new PrintWriter(cr.getClassName() + ".log"));
-//				ClassVisitor cv1 = new NativeMethodSanityChecker(myCV);
-				ClassVisitor cv1 = new NativeMethodSanityChecker(cv0);
+				ClassVisitor myCV = new TraceClassVisitor(cv0, new PrintWriter(cr.getClassName() + ".log"));
+				ClassVisitor cv1 = new NativeMethodSanityChecker(myCV);
+				//ClassVisitor cv1 = new NativeMethodSanityChecker(cv0);
 				cv1 = new GuardStateInserter(cv1);
 				cv1 = new InterruptFixer(cv1);
 				cv1 = new CloneFixer(cv1);

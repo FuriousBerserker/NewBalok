@@ -2,3 +2,7 @@ auto
 build
 classes
 docs
+
+*.class
+*.log
+*.swp
