@@ -162,6 +162,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 			</manifest>
 		</jar>
 		<echo file="${bin.dir}/${run-script}" append="false" message="#!/bin/bash${line.separator}
+								  RR_TOOLPATH='${cup.jar}:${jflex.jar}:${balok.jar}:${jctools.jar}' ${line.separator}
 								  ${java.home}/bin/java -version ${line.separator}
 								  ${java.home}/bin/java ${rr.vmargs} -Xbootclasspath/p:${toString:rr.classpath.jar}:$$RR_TOOLPATH ${rr.main} $$*" />
 		<chmod file="${bin.dir}/${run-script}" perm="u+x" />

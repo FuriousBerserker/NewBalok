@@ -3,6 +3,7 @@ package tools.balok;
 import acme.util.Assert;
 import acme.util.option.CommandLine;
 import balok.causality.AccessMode;
+import balok.causality.Epoch;
 import balok.causality.PtpCausalityFactory;
 import balok.causality.async.ShadowMemory;
 import org.jctools.queues.MpscUnboundedArrayQueue;
@@ -24,7 +25,8 @@ import java.util.function.Supplier;
 public class BalokTool extends Tool implements BarrierListener<FTBarrierState> {
 
     //TODO: Currently we just hardcode the memFactory. Later we will get it from program properties
-    private final Supplier<MemoryTracker> memFactory = () -> new AsyncMemoryTracker(new MpscUnboundedArrayQueue<ShadowMemory>(128));
+    private MpscUnboundedArrayQueue<ShadowMemory> queue = new MpscUnboundedArrayQueue<>(128);
+    private final Supplier<MemoryTracker> memFactory = () -> new AsyncMemoryTracker(queue);
 
     public BalokTool(String name, Tool next, CommandLine commandLine) {
         super(name, next, commandLine);
@@ -35,6 +37,58 @@ public class BalokTool extends Tool implements BarrierListener<FTBarrierState> {
 
     protected static TaskTracker ts_get_taskTracker(ShadowThread st) { Assert.panic("Bad");	return null; }
     protected static void ts_set_taskTracker(ShadowThread st, TaskTracker tt) { Assert.panic("Bad");  }
+
+    private OffloadRaceDetection offload = new OffloadRaceDetection();
+    private Thread raceDetectionThread = new Thread(offload);
+    //TODO: getResource, ShodowMemoryBuilder, tick
+
+    class OffloadRaceDetection implements Runnable {
+
+        private ShadowMemory<MemoryAccess, Epoch> history;
+
+        private boolean isEnd;
+
+        public OffloadRaceDetection() {
+            history = new ShadowMemory<>();
+            isEnd = false;
+        }
+
+        public void end() {
+            isEnd = true;
+        }
+
+        @Override
+        public void run() {
+            while (!isEnd) {
+                if (!queue.isEmpty()) {
+                    queue.drain(history::addAll);
+                }
+            }
+            // guarantee all data is analyzed
+            if (!queue.isEmpty()) {
+                queue.drain(history::addAll);
+            }
+        }
+    }
+
+    @Override
+    public void init() {
+        System.out.println("Balok start");
+        raceDetectionThread.start();
+        super.init();
+    }
+
+    @Override
+    public void fini() {
+        offload.end();
+        try {
+            raceDetectionThread.join();
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+        System.out.println("Balok end");
+        super.fini();
+    }
 
     //Need to initialize the taskTracker and memoryTracker for main thread, since there doeen't exist associated preStart method for main thread
     //Override create rather than preStart
@@ -48,10 +102,13 @@ public class BalokTool extends Tool implements BarrierListener<FTBarrierState> {
         if (parentST != null) {
             TaskTracker parentTask = ts_get_taskTracker(parentST);
             childTask = parentTask.createChild();
+            parentTask.afterSpawn();
         } else {
             //main thread
             //TODO: need to hard code the implementation of ClockController
             childTask = new TaskTracker(PtpCausalityFactory.PREFIX.createController());
+            // increase the timestamp of the initial thread
+            childTask.produceEvent();
         }
         childMem = memFactory.get();
         ts_set_taskTracker(currentST, childTask);
@@ -59,14 +116,6 @@ public class BalokTool extends Tool implements BarrierListener<FTBarrierState> {
         //Keep this hook for experiment of offload
         childMem.onSyncEvent(childTask);
         super.create(ne);
-    }
-
-    //Spawn new child thread
-    @Override
-    public void preStart(StartEvent se) {
-        ShadowThread childST = se.getNewThread();
-        TaskTracker childTask = ts_get_taskTracker(childST);
-        childTask.afterSpawn();
     }
 
     @Override
@@ -101,11 +150,11 @@ public class BalokTool extends Tool implements BarrierListener<FTBarrierState> {
     }
 
     public static boolean readFastPath(final ShadowVar shadow, final ShadowThread st) {
-        return true;
+        return false;
     }
 
     public static boolean writeFastPath(final ShadowVar shadow, final ShadowThread st) {
-        return true;
+        return false;
     }
 
     @Override
