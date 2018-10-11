@@ -37,7 +37,7 @@ public class AsyncMemoryTracker implements MemoryTracker {
         AsyncShadowLocation key = (AsyncShadowLocation) loc;
         AccessEntry<MemoryAccess, Event<Epoch>> acc = new AccessEntry<>(new MemoryAccess(mode, info), tracker.createTimestamp());
         int ticket = key.loc.createTicket();
-        System.out.println(ticket);
+        //System.out.println(ticket + ", " + (mode == AccessMode.READ ? 0 : 1) + ", " + tracker.createTimestamp().toString());
         if (!key.loc.tryAdd(acc, ticket)) {
             currentFrame.add(key.loc, acc, ticket);
             if (currentFrame.isFull()) {

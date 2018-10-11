@@ -20,6 +20,8 @@ public class TaskTracker<T> {
 
     private TaskView<T> cache;
 
+    private boolean isCacheValid;
+
     public TaskTracker(ClockController<T> root, int globalTime) {
         this(globalTime, root);
     }
@@ -32,6 +34,7 @@ public class TaskTracker<T> {
         this.cache = null;
         this.globalTime = globalTime;
         this.ptp = local;
+        this.isCacheValid = false;
     }
 
     public TaskTracker createChild() {
@@ -44,17 +47,19 @@ public class TaskTracker<T> {
 
     public void produceEvent() {
         this.ptp = this.ptp.produceEvent();
+        this.isCacheValid = false;
     }
 
     public void join(TaskView<T> other) {
         ClockController<T> join = this.ptp.join(other.getLocal());
         if (this.ptp != join) {
             this.ptp = join;
+            this.isCacheValid = false;
         }
     }
 
     public TaskView<T> createTimestamp() {
-        if (this.cache == null) {
+        if (!this.isCacheValid) {
             this.cache = new TaskView(this.globalTime, this.ptp.createView(), null, null);
         }
         return this.cache;

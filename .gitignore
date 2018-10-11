@@ -2,7 +2,13 @@ auto
 build
 classes
 docs
+log
+out
+.idea
 
 *.class
 *.log
 *.swp
+*.bytecode
+*.jar
+*.iml

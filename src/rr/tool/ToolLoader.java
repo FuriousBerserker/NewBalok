@@ -76,7 +76,6 @@ public class ToolLoader extends URLClassLoader {
 		final Set<URL> loaded = new HashSet<URL>();
 		try {
 			Enumeration<URL> e = getResources("tools/rrtools.properties");
-                        System.out.println(e.hasMoreElements());
 			while (e.hasMoreElements()) {
 				final URL prop = e.nextElement();
 				if (loaded.contains(prop)) {

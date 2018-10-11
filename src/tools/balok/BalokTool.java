@@ -41,7 +41,7 @@ public class BalokTool extends Tool implements BarrierListener<FTBarrierState> {
     private OffloadRaceDetection offload = new OffloadRaceDetection();
     private Thread raceDetectionThread = new Thread(offload);
     //TODO: getResource, ShodowMemoryBuilder, tick
-
+    //TODO: VectorEpoch.join
     class OffloadRaceDetection implements Runnable {
 
         private ShadowMemory<MemoryAccess, Epoch> history;
@@ -102,13 +102,15 @@ public class BalokTool extends Tool implements BarrierListener<FTBarrierState> {
         if (parentST != null) {
             TaskTracker parentTask = ts_get_taskTracker(parentST);
             childTask = parentTask.createChild();
+            //System.out.println(parentTask.createTimestamp());
             parentTask.afterSpawn();
+            //System.out.println(parentTask.createTimestamp());
         } else {
             //main thread
             //TODO: need to hard code the implementation of ClockController
-            childTask = new TaskTracker(PtpCausalityFactory.PREFIX.createController());
+            childTask = new TaskTracker(PtpCausalityFactory.VECTOR_MUT.createController());
             // increase the timestamp of the initial thread
-            childTask.produceEvent();
+            //childTask.produceEvent();
         }
         childMem = memFactory.get();
         ts_set_taskTracker(currentST, childTask);
