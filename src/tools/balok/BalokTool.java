@@ -41,7 +41,9 @@ public class BalokTool extends Tool implements BarrierListener<FTBarrierState> {
     private OffloadRaceDetection offload = new OffloadRaceDetection();
     private Thread raceDetectionThread = new Thread(offload);
     //TODO: getResource, ShodowMemoryBuilder, tick
-    //TODO: VectorEpoch.join
+    //TODO: VectorEpoch.join, wait/notify, should we do a FT3
+    // wait/notify acquire/release barrier
+    // compare async / sync, FlatController
     class OffloadRaceDetection implements Runnable {
 
         private ShadowMemory<MemoryAccess, Epoch> history;

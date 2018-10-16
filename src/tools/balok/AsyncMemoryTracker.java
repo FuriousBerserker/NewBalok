@@ -19,7 +19,6 @@ public class AsyncMemoryTracker implements MemoryTracker {
     private ShadowMemoryBuilder<MemoryAccess, Epoch> currentFrame = new ShadowMemoryBuilder<>(512);
     private AtomicBoolean active = new AtomicBoolean(true);
 
-    //TODO: Import JCTools
     private final MpscUnboundedArrayQueue<ShadowMemory> queue;
 
     public AsyncMemoryTracker(MpscUnboundedArrayQueue<ShadowMemory> queue) {
@@ -33,7 +32,7 @@ public class AsyncMemoryTracker implements MemoryTracker {
 
     @Override
     public void onAccess(TaskTracker tracker, ShadowLocation loc, AccessMode mode, SourceLocation info) {
-        // XXX: ADD DEBUGGING INFO
+        //TODO: ADD DEBUGGING INFO
         AsyncShadowLocation key = (AsyncShadowLocation) loc;
         AccessEntry<MemoryAccess, Event<Epoch>> acc = new AccessEntry<>(new MemoryAccess(mode, info), tracker.createTimestamp());
         int ticket = key.loc.createTicket();
