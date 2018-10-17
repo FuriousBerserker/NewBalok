@@ -10,10 +10,7 @@ import org.jctools.queues.MpscUnboundedArrayQueue;
 import rr.annotations.Abbrev;
 import rr.barrier.BarrierEvent;
 import rr.barrier.BarrierListener;
-import rr.event.AccessEvent;
-import rr.event.JoinEvent;
-import rr.event.NewThreadEvent;
-import rr.event.StartEvent;
+import rr.event.*;
 import rr.state.ShadowThread;
 import rr.state.ShadowVar;
 import rr.tool.Tool;
@@ -26,7 +23,10 @@ public class BalokTool extends Tool implements BarrierListener<FTBarrierState> {
 
     //TODO: Currently we just hardcode the memFactory. Later we will get it from program properties
     private MpscUnboundedArrayQueue<ShadowMemory> queue = new MpscUnboundedArrayQueue<>(128);
+
     private final Supplier<MemoryTracker> memFactory = () -> new AsyncMemoryTracker(queue);
+
+    private final PtpCausalityFactory vcFactory = PtpCausalityFactory.VECTOR_MUT;
 
     public BalokTool(String name, Tool next, CommandLine commandLine) {
         super(name, next, commandLine);
@@ -110,7 +110,7 @@ public class BalokTool extends Tool implements BarrierListener<FTBarrierState> {
         } else {
             //main thread
             //TODO: need to hard code the implementation of ClockController
-            childTask = new TaskTracker(PtpCausalityFactory.VECTOR_MUT.createController());
+            childTask = new TaskTracker(vcFactory.createController());
             // increase the timestamp of the initial thread
             //childTask.produceEvent();
         }
@@ -141,17 +141,44 @@ public class BalokTool extends Tool implements BarrierListener<FTBarrierState> {
     }
 
     @Override
+    public void acquire(final AcquireEvent event) {
+
+    }
+
+    @Override
+    public void release(final ReleaseEvent event) {
+
+    }
+
+    @Override
+    public void preWait(WaitEvent event) {
+
+    }
+
+    @Override
+    public void postWait(WaitEvent event) {
+
+    }
+
+    @Override
     public void access(AccessEvent fae) {
-        if (fae.getOriginalShadow() instanceof ShadowLocation) {
+        if (fae.getOriginalShadow() instanceof BalokShadowLocation) {
             //TODO: Figure out the usage of getShadow
+            BalokShadowLocation shadow = (BalokShadowLocation)fae.getOriginalShadow();
             TaskTracker task = ts_get_taskTracker(fae.getThread());
             MemoryTracker mem = ts_get_memTracker(fae.getThread());
             //TODO: Need to convert the type of debug info between RoadRunner and Balok
-            mem.onAccess(task, (ShadowLocation)fae.getOriginalShadow(), fae.isWrite() ? AccessMode.WRITE : AccessMode.READ, fae.getAccessInfo().getLoc());
+            mem.onAccess(task, shadow, fae.isWrite() ? AccessMode.WRITE : AccessMode.READ, fae.getAccessInfo().getLoc());
         } else {
             super.access(fae);
         }
     }
+
+    @Override
+    public void volatileAccess(final VolatileAccessEvent event) {
+
+    }
+
 
     public static boolean readFastPath(final ShadowVar shadow, final ShadowThread st) {
         return false;

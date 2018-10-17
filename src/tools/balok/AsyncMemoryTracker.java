@@ -26,12 +26,12 @@ public class AsyncMemoryTracker implements MemoryTracker {
     }
 
     @Override
-    public ShadowLocation createLocation() {
+    public BalokShadowLocation createLocation() {
         return new AsyncShadowLocation();
     }
 
     @Override
-    public void onAccess(TaskTracker tracker, ShadowLocation loc, AccessMode mode, SourceLocation info) {
+    public void onAccess(TaskTracker tracker, BalokShadowLocation loc, AccessMode mode, SourceLocation info) {
         //TODO: ADD DEBUGGING INFO
         AsyncShadowLocation key = (AsyncShadowLocation) loc;
         AccessEntry<MemoryAccess, Event<Epoch>> acc = new AccessEntry<>(new MemoryAccess(mode, info), tracker.createTimestamp());

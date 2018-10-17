@@ -58,6 +58,7 @@ public class Test extends Thread{
 	public static void main(String args[]) throws Exception {
 		final Test t1 = new Test();
 		final Test t2 = new Test();
+                y++;
 		t1.start();
                 //y++;
 		t2.start();

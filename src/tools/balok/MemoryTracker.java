@@ -10,9 +10,9 @@ public interface MemoryTracker {
      * @param loc
      * @param mode
      */
-    void onAccess(TaskTracker tracker, ShadowLocation loc, AccessMode mode, SourceLocation info);
+    void onAccess(TaskTracker tracker, BalokShadowLocation loc, AccessMode mode, SourceLocation info);
 
-    ShadowLocation createLocation();
+    BalokShadowLocation createLocation();
 
     /**
      * Invoked whenever the task emits a synchronization event (thus updates its view).

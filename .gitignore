@@ -5,6 +5,8 @@ docs
 log
 out
 .idea
+backup
+benchmarks
 
 *.class
 *.log
