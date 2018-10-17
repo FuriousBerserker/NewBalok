@@ -8,18 +8,15 @@ import balok.causality.PtpCausalityFactory;
 import balok.causality.async.ShadowMemory;
 import org.jctools.queues.MpscUnboundedArrayQueue;
 import rr.annotations.Abbrev;
-import rr.barrier.BarrierEvent;
-import rr.barrier.BarrierListener;
 import rr.event.*;
 import rr.state.ShadowThread;
 import rr.state.ShadowVar;
 import rr.tool.Tool;
-import tools.fasttrack.FTBarrierState;
 
 import java.util.function.Supplier;
 
 @Abbrev("Balok")
-public class BalokTool extends Tool implements BarrierListener<FTBarrierState> {
+public class BalokTool extends Tool {
 
     //TODO: Currently we just hardcode the memFactory. Later we will get it from program properties
     private MpscUnboundedArrayQueue<ShadowMemory> queue = new MpscUnboundedArrayQueue<>(128);
@@ -193,13 +190,4 @@ public class BalokTool extends Tool implements BarrierListener<FTBarrierState> {
         return new AsyncShadowLocation();
     }
 
-    @Override
-    public void preDoBarrier(BarrierEvent<FTBarrierState> be) {
-
-    }
-
-    @Override
-    public void postDoBarrier(BarrierEvent<FTBarrierState> be) {
-
-    }
 }

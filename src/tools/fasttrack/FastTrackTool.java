@@ -237,7 +237,6 @@ public class FastTrackTool extends Tool implements BarrierListener<FTBarrierStat
 				ts_set_E(st, epoch);
 			}
 			incEpochAndCV(st, null);
-			System.out.println("create: " + tV);
 			Util.log("Initial E for " + tid + ": " + Epoch.toString(ts_get_E(st)));
 		}
 
@@ -580,12 +579,8 @@ public class FastTrackTool extends Tool implements BarrierListener<FTBarrierStat
 		 * RR guarantees that the forked thread will synchronize with 
 		 * thread t before it does anything else.
 		 */
-		System.out.println("parent-before: " + tV);
-		System.out.println("child-before:  " + ts_get_V(su));
 		maxAndIncEpochAndCV(su, tV, event.getInfo());
 		incEpochAndCV(st, event.getInfo());
-		System.out.println("parent: " + tV);
-		System.out.println("child:  " + ts_get_V(su));
 		super.preStart(event);
 		if (COUNT_OPERATIONS) fork.inc(st.getTid());
 	}
