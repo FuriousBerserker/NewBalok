@@ -1,16 +1,19 @@
 package tools.balok;
 
 import acme.util.Assert;
+import acme.util.decorations.Decoration;
+import acme.util.decorations.DecorationFactory;
+import acme.util.decorations.DefaultValue;
 import acme.util.option.CommandLine;
-import balok.causality.AccessMode;
-import balok.causality.Epoch;
-import balok.causality.PtpCausalityFactory;
+import balok.causality.*;
 import balok.causality.async.ShadowMemory;
 import org.jctools.queues.MpscUnboundedArrayQueue;
 import rr.annotations.Abbrev;
 import rr.event.*;
+import rr.state.ShadowLock;
 import rr.state.ShadowThread;
 import rr.state.ShadowVar;
+import rr.state.ShadowVolatile;
 import rr.tool.Tool;
 
 import java.util.function.Supplier;
@@ -25,6 +28,22 @@ public class BalokTool extends Tool {
 
     private final PtpCausalityFactory vcFactory = PtpCausalityFactory.VECTOR_MUT;
 
+    private final Decoration<ShadowLock, BalokLockState> lockVs = ShadowLock.makeDecoration("Balok:ShadowLock",
+            DecorationFactory.Type.MULTIPLE, new DefaultValue<ShadowLock, BalokLockState>() {
+                @Override
+                public BalokLockState get(ShadowLock shadowLock) {
+                    return new BalokLockState(vcFactory.createController());
+                }
+            });
+
+    private final Decoration<ShadowVolatile, BalokVolatileState> volatileVs = ShadowVolatile.makeDecoration("Balok:ShadowVolatile",
+            DecorationFactory.Type.MULTIPLE, new DefaultValue<ShadowVolatile, BalokVolatileState>() {
+                @Override
+                public BalokVolatileState get(ShadowVolatile shadowVolatile) {
+                    return new BalokVolatileState(vcFactory.createController());
+                }
+            });
+
     public BalokTool(String name, Tool next, CommandLine commandLine) {
         super(name, next, commandLine);
     }
@@ -36,6 +55,7 @@ public class BalokTool extends Tool {
     protected static void ts_set_taskTracker(ShadowThread st, TaskTracker tt) { Assert.panic("Bad");  }
 
     private OffloadRaceDetection offload = new OffloadRaceDetection();
+
     private Thread raceDetectionThread = new Thread(offload);
     //TODO: getResource, ShodowMemoryBuilder, tick
     //TODO: VectorEpoch.join, wait/notify, should we do a FT3
@@ -138,23 +158,41 @@ public class BalokTool extends Tool {
     }
 
     @Override
-    public void acquire(final AcquireEvent event) {
+    public void acquire(final AcquireEvent ae) {
+        final TaskTracker task = ts_get_taskTracker(ae.getThread());
+        final BalokLockState lockV = lockVs.get(ae.getLock());
+        task.join(new TaskView(0, lockV.getV().createView(), null, null));
+        super.acquire(ae);
 
     }
 
     @Override
-    public void release(final ReleaseEvent event) {
-
+    public void release(final ReleaseEvent re) {
+        final TaskTracker task = ts_get_taskTracker(re.getThread());
+        final BalokLockState lockV = lockVs.get(re.getLock());
+        lockV.setV(lockV.getV().join(task.createTimestamp()));
+        task.produceEvent();
+        super.release(re);
     }
 
     @Override
-    public void preWait(WaitEvent event) {
-
+    public void preWait(WaitEvent we) {
+        // the thread will release the acquired lock before waiting
+        final TaskTracker task = ts_get_taskTracker(we.getThread());
+        final BalokLockState lockV = lockVs.get(we.getLock());
+        //TODO: Could we apply the same optimization as FastTrack
+        lockV.setV(lockV.getV().join(task.createTimestamp()));
+        task.produceEvent();
+        super.preWait(we);
     }
 
     @Override
-    public void postWait(WaitEvent event) {
-
+    public void postWait(WaitEvent we) {
+        // the thread will acquire the released lock before resuming execution
+        final TaskTracker task = ts_get_taskTracker(we.getThread());
+        final BalokLockState lockV = lockVs.get(we.getLock());
+        task.join(new TaskView(0, lockV.getV().createView(), null, null));
+        super.postWait(we);
     }
 
     @Override
@@ -172,8 +210,18 @@ public class BalokTool extends Tool {
     }
 
     @Override
-    public void volatileAccess(final VolatileAccessEvent event) {
-
+    public void volatileAccess(final VolatileAccessEvent vae) {
+        // write to a volatile happens before subsequent read
+        //TODO: is volatile write ordered ?
+        final TaskTracker task = ts_get_taskTracker(vae.getThread());
+        final BalokVolatileState volatileV = volatileVs.get(vae.getShadowVolatile());
+        if (vae.isWrite()) {
+            volatileV.setV(volatileV.getV().join(task.createTimestamp()));
+            task.produceEvent();
+        } else {
+            task.join(new TaskView(0, volatileV.getV().createView(), null, null));
+        }
+        super.volatileAccess(vae);
     }
 
 
