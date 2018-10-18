@@ -9,6 +9,8 @@ import balok.causality.*;
 import balok.causality.async.ShadowMemory;
 import org.jctools.queues.MpscUnboundedArrayQueue;
 import rr.annotations.Abbrev;
+import rr.barrier.BarrierEvent;
+import rr.barrier.BarrierListener;
 import rr.event.*;
 import rr.state.ShadowLock;
 import rr.state.ShadowThread;
@@ -19,7 +21,7 @@ import rr.tool.Tool;
 import java.util.function.Supplier;
 
 @Abbrev("Balok")
-public class BalokTool extends Tool {
+public class BalokTool extends Tool implements BarrierListener<BalokBarrierState> {
 
     //TODO: Currently we just hardcode the memFactory. Later we will get it from program properties
     private MpscUnboundedArrayQueue<ShadowMemory> queue = new MpscUnboundedArrayQueue<>(128);
@@ -57,6 +59,17 @@ public class BalokTool extends Tool {
     private OffloadRaceDetection offload = new OffloadRaceDetection();
 
     private Thread raceDetectionThread = new Thread(offload);
+
+    @Override
+    public void preDoBarrier(BarrierEvent<BalokBarrierState> be) {
+        throw new RuntimeException("unsupport barrier in preDoBarrier");
+    }
+
+    @Override
+    public void postDoBarrier(BarrierEvent<BalokBarrierState> be) {
+        throw new RuntimeException("unsupport barrier in postDoBarrier");
+    }
+
     //TODO: getResource, ShodowMemoryBuilder, tick
     //TODO: VectorEpoch.join, wait/notify, should we do a FT3
     // wait/notify acquire/release barrier
