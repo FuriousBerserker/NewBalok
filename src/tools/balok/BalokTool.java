@@ -4,6 +4,7 @@ import acme.util.Assert;
 import acme.util.decorations.Decoration;
 import acme.util.decorations.DecorationFactory;
 import acme.util.decorations.DefaultValue;
+import acme.util.decorations.NullDefault;
 import acme.util.option.CommandLine;
 import balok.causality.*;
 import balok.causality.async.ShadowMemory;
@@ -11,6 +12,7 @@ import org.jctools.queues.MpscUnboundedArrayQueue;
 import rr.annotations.Abbrev;
 import rr.barrier.BarrierEvent;
 import rr.barrier.BarrierListener;
+import rr.barrier.BarrierMonitor;
 import rr.event.*;
 import rr.state.ShadowLock;
 import rr.state.ShadowThread;
@@ -18,6 +20,8 @@ import rr.state.ShadowVar;
 import rr.state.ShadowVolatile;
 import rr.tool.Tool;
 
+import java.util.List;
+import java.util.concurrent.*;
 import java.util.function.Supplier;
 
 @Abbrev("Balok")
@@ -29,6 +33,8 @@ public class BalokTool extends Tool implements BarrierListener<BalokBarrierState
     private final Supplier<MemoryTracker> memFactory = () -> new AsyncMemoryTracker(queue);
 
     private final PtpCausalityFactory vcFactory = PtpCausalityFactory.VECTOR_MUT;
+
+    private final int threadNumForRaceDection = 1;
 
     private final Decoration<ShadowLock, BalokLockState> lockVs = ShadowLock.makeDecoration("Balok:ShadowLock",
             DecorationFactory.Type.MULTIPLE, new DefaultValue<ShadowLock, BalokLockState>() {
@@ -46,8 +52,17 @@ public class BalokTool extends Tool implements BarrierListener<BalokBarrierState
                 }
             });
 
+    private final Decoration<ShadowThread, BalokBarrierState> barrierVs = ShadowThread.makeDecoration("Balok:Barrier",
+            DecorationFactory.Type.MULTIPLE, new NullDefault<ShadowThread, BalokBarrierState>());
+
     public BalokTool(String name, Tool next, CommandLine commandLine) {
         super(name, next, commandLine);
+        new BarrierMonitor<BalokBarrierState>(this, new DefaultValue<Object, BalokBarrierState>() {
+            @Override
+            public BalokBarrierState get(Object o) {
+                return new BalokBarrierState(vcFactory.createController());
+            }
+        });
     }
 
     protected static MemoryTracker ts_get_memTracker(ShadowThread st) { Assert.panic("Bad");	return null; }
@@ -56,32 +71,50 @@ public class BalokTool extends Tool implements BarrierListener<BalokBarrierState
     protected static TaskTracker ts_get_taskTracker(ShadowThread st) { Assert.panic("Bad");	return null; }
     protected static void ts_set_taskTracker(ShadowThread st, TaskTracker tt) { Assert.panic("Bad");  }
 
-    private OffloadRaceDetection offload = new OffloadRaceDetection();
+    private Offload offload = new Offload();
 
     private Thread raceDetectionThread = new Thread(offload);
 
     @Override
     public void preDoBarrier(BarrierEvent<BalokBarrierState> be) {
-        throw new RuntimeException("unsupport barrier in preDoBarrier");
+        final ShadowThread st = be.getThread();
+        final TaskTracker task = ts_get_taskTracker(st);
+        final BalokBarrierState barrier = be.getBarrier();
+        synchronized (barrier) {
+            barrier.setV(barrier.getV().join(task.createTimestamp()));
+            barrierVs.set(st, barrier);
+        }
     }
 
     @Override
     public void postDoBarrier(BarrierEvent<BalokBarrierState> be) {
-        throw new RuntimeException("unsupport barrier in postDoBarrier");
+        final ShadowThread st = be.getThread();
+        final TaskTracker task = ts_get_taskTracker(st);
+        final BalokBarrierState barrier = be.getBarrier();
+        synchronized (barrier) {
+            task.join(new TaskView(barrierVs.get(st).getV().createView()));
+            if (barrier.getV() == barrierVs.get(st)) {
+                barrier.setV(vcFactory.createController());
+            }
+            task.produceEvent();
+        }
     }
 
     //TODO: getResource, ShodowMemoryBuilder, tick
     //TODO: VectorEpoch.join, wait/notify, should we do a FT3
-    // wait/notify acquire/release barrier
+    //TODO: wait/notify acquire/release barrier
     // compare async / sync, FlatController
-    class OffloadRaceDetection implements Runnable {
+    class Offload implements Runnable {
 
         private ShadowMemory<MemoryAccess, Epoch> history;
 
+        private ExecutorService pool;
+
         private boolean isEnd;
 
-        public OffloadRaceDetection() {
+        public Offload() {
             history = new ShadowMemory<>();
+            pool = Executors.newFixedThreadPool(threadNumForRaceDection);
             isEnd = false;
         }
 
@@ -93,13 +126,30 @@ public class BalokTool extends Tool implements BarrierListener<BalokBarrierState
         public void run() {
             while (!isEnd) {
                 if (!queue.isEmpty()) {
-                    queue.drain(history::addAll);
+                    queue.drain(this::raceDetection);
                 }
             }
             // guarantee all data is analyzed
             if (!queue.isEmpty()) {
-                queue.drain(history::addAll);
+                queue.drain(this::raceDetection);
             }
+        }
+
+        public void raceDetection(ShadowMemory<MemoryAccess, Epoch> other) {
+            List< Callable<Object> > tasks = history.generateParallelAddTask(other);
+            try {
+                List< Future<Object> > futures = pool.invokeAll(tasks);
+                for (Future future: futures) {
+                    future.get();
+                }
+            } catch (InterruptedException e) {
+                System.out.println("Race detection is interrupted");
+                e.printStackTrace();
+            } catch (ExecutionException e) {
+                System.out.println("Race detection throws an internal exception");
+                e.printStackTrace();
+            }
+            System.out.println("Offload race detection is done, tackle " + tasks.size() + " locations in parallel");
         }
     }
 
@@ -127,8 +177,8 @@ public class BalokTool extends Tool implements BarrierListener<BalokBarrierState
     @Override
     public void create(NewThreadEvent ne) {
         //Initialize TaskManager and MemoryManager
-        ShadowThread currentST = ne.getThread();
-        ShadowThread parentST = ne.getThread().getParent();
+        final ShadowThread currentST = ne.getThread();
+        final ShadowThread parentST = ne.getThread().getParent();
         TaskTracker childTask = null;
         MemoryTracker childMem = null;
         if (parentST != null) {
@@ -154,8 +204,8 @@ public class BalokTool extends Tool implements BarrierListener<BalokBarrierState
 
     @Override
     public void stop(ShadowThread td) {
-        TaskTracker task = ts_get_taskTracker(td);
-        MemoryTracker mem = ts_get_memTracker(td);
+        final TaskTracker task = ts_get_taskTracker(td);
+        final MemoryTracker mem = ts_get_memTracker(td);
         mem.onEnd(task);
         super.stop(td);
     }
@@ -174,7 +224,7 @@ public class BalokTool extends Tool implements BarrierListener<BalokBarrierState
     public void acquire(final AcquireEvent ae) {
         final TaskTracker task = ts_get_taskTracker(ae.getThread());
         final BalokLockState lockV = lockVs.get(ae.getLock());
-        task.join(new TaskView(0, lockV.getV().createView(), null, null));
+        task.join(new TaskView(lockV.getV().createView()));
         super.acquire(ae);
 
     }
@@ -204,7 +254,7 @@ public class BalokTool extends Tool implements BarrierListener<BalokBarrierState
         // the thread will acquire the released lock before resuming execution
         final TaskTracker task = ts_get_taskTracker(we.getThread());
         final BalokLockState lockV = lockVs.get(we.getLock());
-        task.join(new TaskView(0, lockV.getV().createView(), null, null));
+        task.join(new TaskView(lockV.getV().createView()));
         super.postWait(we);
     }
 
@@ -232,7 +282,7 @@ public class BalokTool extends Tool implements BarrierListener<BalokBarrierState
             volatileV.setV(volatileV.getV().join(task.createTimestamp()));
             task.produceEvent();
         } else {
-            task.join(new TaskView(0, volatileV.getV().createView(), null, null));
+            task.join(new TaskView(volatileV.getV().createView()));
         }
         super.volatileAccess(vae);
     }

@@ -1,6 +1,7 @@
 package tools.balok;
 
 import balok.causality.AccessMode;
+import balok.causality.TaskTracker;
 import rr.meta.SourceLocation;
 
 public interface MemoryTracker {
