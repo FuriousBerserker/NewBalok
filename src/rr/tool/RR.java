@@ -159,9 +159,11 @@ public class RR {
 						NotificationEmitter emitter = (NotificationEmitter) gc;
 						emitter.addNotificationListener(listener, null, null);
 					}
-				} } );					
+				} } );
 
 
+    public static final CommandLineOption<Integer> raceDetectThreadsOption =
+            CommandLine.makeInteger("raceDetectThreads", 1, CommandLineOption.Kind.STABLE, "Number of threads dedicated to race detection");
 
 	public static final StringMatcher toolCode = new StringMatcher(StringMatchResult.REJECT, "+acme..*", "+rr..*", "+java..*");
 

@@ -70,6 +70,7 @@ import acme.util.io.URLUtils;
 import acme.util.option.CommandLine;
 import acme.util.option.CommandLineOption;
 import acme.util.time.TimedStmt;
+import tools.balok.BalokTool;
 
 /*
  * The Main class for RoadRunner: creates tool chain, processes flags, 
@@ -293,6 +294,9 @@ public class RRMain {
 		cl.addOrderConstraint(rr.tool.RR.toolPathOption, rr.tool.RR.toolOption);
 		cl.addOrderConstraint(rr.tool.RR.toolOption, rr.tool.RR.toolOption);
 		cl.addOrderConstraint(rr.barrier.BarrierMonitor.noBarrier, rr.tool.RR.toolOption);
+
+		cl.addGroup("Balok Specific Options");
+		cl.add(rr.tool.RR.raceDetectThreadsOption);
 
 		int n = cl.apply(argv);
 

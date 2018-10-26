@@ -6,6 +6,7 @@ import acme.util.decorations.DecorationFactory;
 import acme.util.decorations.DefaultValue;
 import acme.util.decorations.NullDefault;
 import acme.util.option.CommandLine;
+import acme.util.option.CommandLineOption;
 import balok.causality.*;
 import balok.causality.async.ShadowMemory;
 import org.jctools.queues.MpscUnboundedArrayQueue;
@@ -18,6 +19,7 @@ import rr.state.ShadowLock;
 import rr.state.ShadowThread;
 import rr.state.ShadowVar;
 import rr.state.ShadowVolatile;
+import rr.tool.RR;
 import rr.tool.Tool;
 
 import java.util.List;
@@ -28,13 +30,12 @@ import java.util.function.Supplier;
 public class BalokTool extends Tool implements BarrierListener<BalokBarrierState> {
 
     //TODO: Currently we just hardcode the memFactory. Later we will get it from program properties
+
     private MpscUnboundedArrayQueue<ShadowMemory> queue = new MpscUnboundedArrayQueue<>(128);
 
     private final Supplier<MemoryTracker> memFactory = () -> new AsyncMemoryTracker(queue);
 
     private final PtpCausalityFactory vcFactory = PtpCausalityFactory.VECTOR_MUT;
-
-    private final int threadNumForRaceDection = 1;
 
     private final Decoration<ShadowLock, BalokLockState> lockVs = ShadowLock.makeDecoration("Balok:ShadowLock",
             DecorationFactory.Type.MULTIPLE, new DefaultValue<ShadowLock, BalokLockState>() {
@@ -81,7 +82,7 @@ public class BalokTool extends Tool implements BarrierListener<BalokBarrierState
         final TaskTracker task = ts_get_taskTracker(st);
         final BalokBarrierState barrier = be.getBarrier();
         synchronized (barrier) {
-            barrier.setV(barrier.getV().join(task.createTimestamp()));
+            barrier.join(task.createTimestamp());
             barrierVs.set(st, barrier);
         }
     }
@@ -114,8 +115,14 @@ public class BalokTool extends Tool implements BarrierListener<BalokBarrierState
 
         public Offload() {
             history = new ShadowMemory<>();
-            pool = Executors.newFixedThreadPool(threadNumForRaceDection);
+            pool = null;
             isEnd = false;
+        }
+
+        // Initialize the thread pool in init to make sure command line options have been parsed
+        public void init() {
+            pool = Executors.newFixedThreadPool(RR.raceDetectThreadsOption.get());
+            System.out.println("thread num " + RR.raceDetectThreadsOption.get());
         }
 
         public void end() {
@@ -156,6 +163,7 @@ public class BalokTool extends Tool implements BarrierListener<BalokBarrierState
     @Override
     public void init() {
         System.out.println("Balok start");
+        offload.init();
         raceDetectionThread.start();
         super.init();
     }
@@ -233,7 +241,7 @@ public class BalokTool extends Tool implements BarrierListener<BalokBarrierState
     public void release(final ReleaseEvent re) {
         final TaskTracker task = ts_get_taskTracker(re.getThread());
         final BalokLockState lockV = lockVs.get(re.getLock());
-        lockV.setV(lockV.getV().join(task.createTimestamp()));
+        lockV.join(task.createTimestamp());
         task.produceEvent();
         super.release(re);
     }
@@ -244,7 +252,7 @@ public class BalokTool extends Tool implements BarrierListener<BalokBarrierState
         final TaskTracker task = ts_get_taskTracker(we.getThread());
         final BalokLockState lockV = lockVs.get(we.getLock());
         //TODO: Could we apply the same optimization as FastTrack
-        lockV.setV(lockV.getV().join(task.createTimestamp()));
+        lockV.join(task.createTimestamp());
         task.produceEvent();
         super.preWait(we);
     }
@@ -279,7 +287,7 @@ public class BalokTool extends Tool implements BarrierListener<BalokBarrierState
         final TaskTracker task = ts_get_taskTracker(vae.getThread());
         final BalokVolatileState volatileV = volatileVs.get(vae.getShadowVolatile());
         if (vae.isWrite()) {
-            volatileV.setV(volatileV.getV().join(task.createTimestamp()));
+            volatileV.join(task.createTimestamp());
             task.produceEvent();
         } else {
             task.join(new TaskView(volatileV.getV().createView()));
