@@ -1,26 +1,29 @@
 package tools.balok;
 
-import balok.causality.ClockController;
 import balok.causality.TaskView;
 
 public class BalokVolatileState<T> {
 
-    private ClockController<T> vc;
+    private TaskView<T> view;
 
-    public BalokVolatileState(ClockController<T> vc) {
-        this.vc = vc;
+    public BalokVolatileState() {
+        this.view = null;
     }
 
-    public ClockController<T> getV() {
-        return this.vc;
+    public BalokVolatileState(TaskView<T> view) {
+        this.view = view;
     }
 
-    public void join(TaskView<T> view) {
-        vc = vc.join(view.getLocal());
+    public TaskView<T> getView() {
+        return this.view;
+    }
+
+    public void setView(TaskView<T> view) {
+        this.view = view;
     }
 
     @Override
     public String toString() {
-        return vc.toString();
+        return view.toString();
     }
 }

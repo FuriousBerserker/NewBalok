@@ -8,6 +8,7 @@
 		<buildCommand>
 			<name>org.eclipse.jdt.core.javabuilder</name>
 			<arguments>
+                        <COMPILER_COMPLIANCE>1.8</COMPILER_COMPLIANCE>
 			</arguments>
 		</buildCommand>
 	</buildSpec>

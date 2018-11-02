@@ -1,29 +1,19 @@
 package tools.balok;
 
-import balok.causality.ClockController;
-import balok.causality.TaskView;
 
-public class BalokBarrierState<T> {
-    private ClockController<T> vc;
+public class BalokBarrierState {
 
-    public BalokBarrierState(ClockController<T> vc) {
-        this.vc = vc;
+    private Object barrier;
+
+    public BalokBarrierState(Object barrier) {
+        this.barrier = barrier;
     }
 
-    public ClockController<T> getV() {
-        return this.vc;
+    public void setBarrier(Object barrier) {
+        this.barrier = barrier;
     }
 
-    public void setV(ClockController<T> vc) {
-        this.vc = vc;
-    }
-
-    public void join(TaskView<T> view) {
-        vc = vc.join(view.getLocal());
-    }
-
-    @Override
-    public String toString() {
-        return vc.toString();
+    public int getBarrierID() {
+        return barrier.hashCode();
     }
 }
