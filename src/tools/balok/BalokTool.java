@@ -76,6 +76,7 @@ public class BalokTool extends Tool implements BarrierListener<BalokBarrierState
 
     public BalokTool(String name, Tool next, CommandLine commandLine) {
         super(name, next, commandLine);
+        System.out.println("balok created");
         new BarrierMonitor<BalokBarrierState>(this, new DefaultValue<Object, BalokBarrierState>() {
             @Override
             public BalokBarrierState get(Object o) {
@@ -96,21 +97,21 @@ public class BalokTool extends Tool implements BarrierListener<BalokBarrierState
 
     @Override
     public void preDoBarrier(BarrierEvent<BalokBarrierState> be) {
-        //System.out.println("preDoBarrier, barrier ID is " + be.getBarrier().getBarrierID());
+        //System.out.println("preDoBarrier, barrier ID is " + be.getBarrier().getBarrierId());
         final ShadowThread st = be.getThread();
         final TaskTracker task = ts_get_taskTracker(st);
         final BalokBarrierState barrierState = be.getBarrier();
-        task.beforeBarrier(barrierState.getBarrierID());
+        task.beforeBarrier(barrierState);
     }
 
     @Override
     public void postDoBarrier(BarrierEvent<BalokBarrierState> be) {
-        //System.out.println("postDoBarrier, barrier ID is " + be.getBarrier().getBarrierID());
+        //System.out.println("postDoBarrier, barrier ID is " + be.getBarrier().getBarrierId());
         final ShadowThread st = be.getThread();
         final TaskTracker task = ts_get_taskTracker(st);
         final BalokBarrierState barrierState = be.getBarrier();
-        task.afterBarrier(barrierState.getBarrierID());
-        System.out.println(task);
+        task.afterBarrier(barrierState);
+        //System.out.println(task);
     }
 
     class Offload implements Runnable {
@@ -147,6 +148,7 @@ public class BalokTool extends Tool implements BarrierListener<BalokBarrierState
             // guarantee all data is analyzed
             if (!queue.isEmpty()) {
                 queue.drain(this::raceDetection);
+                pool.shutdown();
             }
         }
 
@@ -199,11 +201,11 @@ public class BalokTool extends Tool implements BarrierListener<BalokBarrierState
         MemoryTracker childMem = null;
         if (parentST != null) {
             TaskTracker parentTask = ts_get_taskTracker(parentST);
-            childTask = parentTask.createChild();
+            childTask = parentTask.createChild(currentST.getTid());
             parentTask.afterSpawn();
         } else {
             // initial thread
-            childTask = new TaskTracker(vcFactory.createController());
+            childTask = new TaskTracker(currentST.getTid(), vcFactory.createController());
             // When creating the instance of TaskTracker for the initial thread,
             // the timestamp starts from 1, so here we don't need to increase it again
             //childTask.produceEvent();
@@ -221,6 +223,9 @@ public class BalokTool extends Tool implements BarrierListener<BalokBarrierState
         final TaskTracker task = ts_get_taskTracker(td);
         final MemoryTracker mem = ts_get_memTracker(td);
         mem.onEnd(task);
+        if (RR.unitTestOption.get()) {
+           Util.printf("final: " + task); 
+        }
         //TODO: shall we set task and mem to null to help garbage collection?
         super.stop(td);
     }

@@ -1,11 +1,13 @@
 package tools.balok;
 
+import balok.causality.BarrierState;
 
-public class BalokBarrierState {
+public class BalokBarrierState extends BarrierState {
 
     private Object barrier;
 
     public BalokBarrierState(Object barrier) {
+        super(barrier.hashCode());
         this.barrier = barrier;
     }
 
@@ -13,7 +15,4 @@ public class BalokBarrierState {
         this.barrier = barrier;
     }
 
-    public int getBarrierID() {
-        return barrier.hashCode();
-    }
 }

@@ -165,6 +165,9 @@ public class RR {
     public static final CommandLineOption<Integer> raceDetectThreadsOption =
             CommandLine.makeInteger("raceDetectThreads", 1, CommandLineOption.Kind.STABLE, "Number of threads dedicated to race detection");
 
+    public static final CommandLineOption<Boolean> unitTestOption = 
+            CommandLine.makeBoolean("unitTest", false, CommandLineOption.Kind.STABLE, "Unit test mode for Balok tool");
+
 	public static final StringMatcher toolCode = new StringMatcher(StringMatchResult.REJECT, "+acme..*", "+rr..*", "+java..*");
 
 	private static volatile boolean shuttingDown = false;
