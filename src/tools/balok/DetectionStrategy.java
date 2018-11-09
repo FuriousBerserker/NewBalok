@@ -8,6 +8,7 @@ import rr.tool.RR;
 
 import java.util.List;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public enum DetectionStrategy {
 
@@ -71,12 +72,13 @@ public enum DetectionStrategy {
 
             private ExecutorService pool;
 
-            private boolean isEnd;
+            private final AtomicBoolean isEnd;
 
             public Offload() {
                 history = new ShadowMemory<>();
                 pool = null;
-                isEnd = false;
+                isEnd = new AtomicBoolean(false);
+
             }
 
             // Initialize the thread pool in init to make sure command line options have been parsed
@@ -86,12 +88,12 @@ public enum DetectionStrategy {
             }
 
             public void end() {
-                isEnd = true;
+                isEnd.set(true);
             }
 
             @Override
             public void run() {
-                while (!isEnd) {
+                while (!isEnd.get()) {
                     if (!queue.isEmpty()) {
                         queue.drain(this::raceDetection);
                     }
