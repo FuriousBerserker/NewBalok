@@ -283,6 +283,9 @@ def unitTest(testCaseName):
         errorTests.append(testCaseName)
 
 def main():
+    if not checkPythonVersion(3, 6):
+        print("require Python 3.6+")
+        exit(1)
     os.chdir(rootDir)
     print('Start unit test for Balok')
     testCases = [o for o in os.listdir(rootDir) if os.path.isdir(os.path.join(rootDir,o)) and o.startswith(testPrefix)]
@@ -302,10 +305,8 @@ def main():
         print('Error test cases:', errorTests)
         print('Failed test cases:', failTests)
 
-    if checkPythonVersion(3, 6):
-        print(f'error: {error}, fail: {fail}, success: {success}' )
-    else:
-        print('error: {:d}, fail: {:d}, success: {:d}'.format(error, fail, success))
+    #print(f'error: {error}, fail: {fail}, success: {success}' )
+    print('error: {:d}, fail: {:d}, success: {:d}'.format(error, fail, success))
     print('Complete unit test')
    
 if __name__ == '__main__':
