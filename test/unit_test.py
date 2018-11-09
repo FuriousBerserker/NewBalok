@@ -10,6 +10,7 @@ correctTestPrefix = 'correct'
 raceTestPrefix = 'error'
 VCFile = 'vc.json'
 raceFile = 'race.json'
+logFile = 'output.log'
 testClass = 'Test'
 sourceFile = testClass + '.java'
 targetFile = testClass + '.class'
@@ -20,6 +21,7 @@ error = 0
 successTests = []
 failTests = []
 errorTests = []
+generateLog = False
 
 class VC:
 
@@ -89,8 +91,15 @@ def compileSource(source):
     else:
         return True
 
-def runRoadrunner(entryClass):
-    result = subprocess.run(['../../build/bin/rrrun', '-tool=Balok', '-unitTest', '-noxml', '-quiet', '-noTidGC', '-offload', entryClass], stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding='utf-8')
+def runRoadrunner(entryClass, params):
+    cmd = ['../../build/bin/rrrun']
+    cmd.extend(params)
+    cmd.append(entryClass)
+    result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding='utf-8')
+    if generateLog:
+        with open(logFile, 'a') as dumpOutput:
+            dumpOutput.write(result.stdout)
+            dumpOutput.write(result.stderr)
     if result.returncode != 0:
         print('output:')
         print(result.stdout)
@@ -249,13 +258,21 @@ def unitTest(testCaseName):
             errorTests.append(testCaseName)
             return
             
-    executeSuccess, stdout, stderr = runRoadrunner(testClass)
-    if executeSuccess:
-        passVCChecking, message = checkVC(testCaseName, stdout)
+    executeSyncSuccess, stdout, stderr = runRoadrunner(testClass, ['-tool=Balok', '-unitTest', '-noxml', '-quiet', '-noTidGC'])
+    executeAsyncSuccess, stdout2, stderr2 = runRoadrunner(testClass, ['-tool=Balok', '-unitTest', '-noxml', '-quiet', '-noTidGC', '-offload'])
+    if executeSyncSuccess and executeAsyncSuccess:
+        print('check synchronous race detection')
+        passSyncVCChecking, message = checkVC(testCaseName, stdout)
         print(message)
-        passRaceChecking, message = checkRace(testCaseName, stdout)
+        passSyncRaceChecking, message = checkRace(testCaseName, stdout)
         print(message)
-        if passVCChecking and passRaceChecking:
+        print('check asynchronous race detection')
+        passAsyncVCChecking, message = checkVC(testCaseName, stdout2)
+        print(message)
+        passAsyncRaceChecking, message = checkRace(testCaseName, stdout2)
+        print(message)
+
+        if passSyncVCChecking and passSyncRaceChecking and passAsyncVCChecking and passAsyncRaceChecking:
             success += 1
             successTests.append(testCaseName)
         else:

@@ -1,10 +1,6 @@
 package tools.balok;
 
-import balok.causality.AccessEntry;
-import balok.causality.AccessMode;
-import balok.causality.Epoch;
-import balok.causality.Event;
-import balok.causality.TaskTracker;
+import balok.causality.*;
 import balok.causality.async.ShadowMemory;
 import balok.causality.async.ShadowMemoryBuilder;
 import org.jctools.queues.MpscUnboundedArrayQueue;
@@ -35,7 +31,7 @@ public class AsyncMemoryTracker implements MemoryTracker {
     public void onAccess(TaskTracker tracker, BalokShadowLocation loc, AccessMode mode, SourceLocation info, int threadID) {
         //TODO: ADD DEBUGGING INFO
         AsyncShadowLocation key = (AsyncShadowLocation) loc;
-        AccessEntry<MemoryAccess, Event<Epoch>> acc = new AccessEntry<>(new MemoryAccess(mode, info, threadID), tracker.createTimestamp());
+        AccessEntry<MemoryAccess, Event<Epoch>> acc = new AccessEntry<>(MemoryAccess.get(mode, info, threadID), tracker.createTimestamp());
         int ticket = key.loc.createTicket();
         //System.out.println(ticket + ", " + (mode == AccessMode.READ ? 0 : 1) + ", " + tracker.createTimestamp().toString());
         if (!key.loc.tryAdd(acc, ticket)) {
