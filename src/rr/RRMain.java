@@ -297,7 +297,8 @@ public class RRMain {
 
 		cl.addGroup("Balok Specific Options");
 		cl.add(rr.tool.RR.raceDetectThreadsOption);
-                cl.add(rr.tool.RR.unitTestOption);
+		cl.add(rr.tool.RR.unitTestOption);
+		cl.add(rr.tool.RR.offloadOption);
 
 		int n = cl.apply(argv);
 

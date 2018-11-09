@@ -8,9 +8,6 @@ import acme.util.decorations.DefaultValue;
 import acme.util.option.CommandLine;
 
 import balok.causality.*;
-import balok.causality.async.ShadowMemory;
-
-import org.jctools.queues.MpscUnboundedArrayQueue;
 
 import rr.annotations.Abbrev;
 import rr.barrier.BarrierEvent;
@@ -35,9 +32,7 @@ import rr.event.AccessEvent;
 import rr.meta.ArrayAccessInfo;
 import rr.meta.FieldInfo;
 
-import java.util.List;
-import java.util.concurrent.*;
-import java.util.function.Supplier;
+import java.util.concurrent.atomic.AtomicInteger;
 
 // finished: getResource, ShodowMemoryBuilder, tick
 // finished: VectorEpoch.join, wait/notify, should we do a FT3
@@ -48,9 +43,7 @@ public class BalokTool extends Tool implements BarrierListener<BalokBarrierState
 
     // TODO: Currently we just hardcode the memFactory. Later we will get it from program properties
 
-    private MpscUnboundedArrayQueue<ShadowMemory> queue = new MpscUnboundedArrayQueue<>(128);
-
-    private final Supplier<MemoryTracker> memFactory = () -> new AsyncMemoryTracker(queue);
+    private DetectionStrategy memFactory = null;
 
     private final PtpCausalityFactory vcFactory = PtpCausalityFactory.VECTOR_MUT;
 
@@ -78,9 +71,16 @@ public class BalokTool extends Tool implements BarrierListener<BalokBarrierState
         super(name, next, commandLine);
         System.out.println("balok created");
         new BarrierMonitor<BalokBarrierState>(this, new DefaultValue<Object, BalokBarrierState>() {
+            AtomicInteger barrierIDGen = new AtomicInteger();
             @Override
             public BalokBarrierState get(Object o) {
-                return new BalokBarrierState(o);
+                BalokBarrierState barrierState = null;
+                if (RR.unitTestOption.get()) {
+                    barrierState = new BalokBarrierState(o, barrierIDGen.getAndIncrement());
+                } else {
+                    barrierState = new BalokBarrierState(o);
+                }
+                return barrierState;
             }
         });
     }
@@ -90,10 +90,6 @@ public class BalokTool extends Tool implements BarrierListener<BalokBarrierState
 
     protected static TaskTracker ts_get_taskTracker(ShadowThread st) { Assert.panic("Bad");	return null; }
     protected static void ts_set_taskTracker(ShadowThread st, TaskTracker tt) { Assert.panic("Bad");  }
-
-    private Offload offload = new Offload();
-
-    private Thread raceDetectionThread = new Thread(offload);
 
     @Override
     public void preDoBarrier(BarrierEvent<BalokBarrierState> be) {
@@ -114,78 +110,23 @@ public class BalokTool extends Tool implements BarrierListener<BalokBarrierState
         //System.out.println(task);
     }
 
-    class Offload implements Runnable {
-
-        private ShadowMemory<MemoryAccess, Epoch> history;
-
-        private ExecutorService pool;
-
-        private boolean isEnd;
-
-        public Offload() {
-            history = new ShadowMemory<>();
-            pool = null;
-            isEnd = false;
-        }
-
-        // Initialize the thread pool in init to make sure command line options have been parsed
-        public void init() {
-            pool = Executors.newFixedThreadPool(RR.raceDetectThreadsOption.get());
-            Util.println("number of dedicated race detection threads: " + RR.raceDetectThreadsOption.get());
-        }
-
-        public void end() {
-            isEnd = true;
-        }
-
-        @Override
-        public void run() {
-            while (!isEnd) {
-                if (!queue.isEmpty()) {
-                    queue.drain(this::raceDetection);
-                }
-            }
-            // guarantee all data is analyzed
-            if (!queue.isEmpty()) {
-                queue.drain(this::raceDetection);
-                pool.shutdown();
-            }
-        }
-
-        public void raceDetection(ShadowMemory<MemoryAccess, Epoch> other) {
-            List< Callable<Object> > tasks = history.generateParallelAddTask(other);
-            try {
-                List< Future<Object> > futures = pool.invokeAll(tasks);
-                for (Future future: futures) {
-                    future.get();
-                }
-            } catch (InterruptedException e) {
-                Util.error("Race detection is interrupted");
-                e.printStackTrace();
-            } catch (ExecutionException e) {
-                Util.error("Race detection throws an internal exception");
-                e.printStackTrace();
-            }
-            Util.println("Offload race detection is done, tackle " + tasks.size() + " locations in parallel");
-        }
-    }
-
     @Override
     public void init() {
         Util.println("Balok start");
-        offload.init();
-        raceDetectionThread.start();
+        if (RR.offloadOption.get()) {
+            Util.println("Offload race detection enabled");
+            memFactory = DetectionStrategy.ASYNC;
+        } else {
+            Util.println("Offload race detection disabled");
+            memFactory = DetectionStrategy.SYNC;
+        }
+        memFactory.init();
         super.init();
     }
 
     @Override
     public void fini() {
-        offload.end();
-        try {
-            raceDetectionThread.join();
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        }
+        memFactory.fini();
         Util.println("Balok end");
         super.fini();
     }
@@ -202,6 +143,7 @@ public class BalokTool extends Tool implements BarrierListener<BalokBarrierState
         if (parentST != null) {
             TaskTracker parentTask = ts_get_taskTracker(parentST);
             childTask = parentTask.createChild(currentST.getTid());
+            System.out.println(parentST.getTid() + " " + currentST.getTid());
             parentTask.afterSpawn();
         } else {
             // initial thread
@@ -210,7 +152,7 @@ public class BalokTool extends Tool implements BarrierListener<BalokBarrierState
             // the timestamp starts from 1, so here we don't need to increase it again
             //childTask.produceEvent();
         }
-        childMem = memFactory.get();
+        childMem = memFactory.createMemoryTracker();
         ts_set_taskTracker(currentST, childTask);
         ts_set_memTracker(currentST, childMem);
         // Keep this hook for SyncMemoryChecker
@@ -224,7 +166,7 @@ public class BalokTool extends Tool implements BarrierListener<BalokBarrierState
         final MemoryTracker mem = ts_get_memTracker(td);
         mem.onEnd(task);
         if (RR.unitTestOption.get()) {
-           Util.printf("final: " + task); 
+           Util.printf(task.toString()); 
         }
         //TODO: shall we set task and mem to null to help garbage collection?
         super.stop(td);
@@ -334,7 +276,7 @@ public class BalokTool extends Tool implements BarrierListener<BalokBarrierState
             return super.makeShadowVar(event);
         } else {
             // TODO: shall we store the source info in shadow memory to reduce the memory usage
-            return new AsyncShadowLocation();
+            return memFactory.createShadowLocation();
         }
     }
 

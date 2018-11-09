@@ -25,5 +25,5 @@ public interface MemoryTracker {
      * Invoked whenever a task terminates its execution.
      * @param task
      */
-    void onEnd(TaskTracker task);
+    void onEnd(TaskTracker tracker);
 }

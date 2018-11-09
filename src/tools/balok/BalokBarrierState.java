@@ -11,6 +11,11 @@ public class BalokBarrierState extends BarrierState {
         this.barrier = barrier;
     }
 
+    public BalokBarrierState(Object barrier, int barrierID) {
+        super(barrierID);
+        this.barrier = barrier;
+    }
+
     public void setBarrier(Object barrier) {
         this.barrier = barrier;
     }

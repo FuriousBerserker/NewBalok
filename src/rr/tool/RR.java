@@ -168,6 +168,9 @@ public class RR {
     public static final CommandLineOption<Boolean> unitTestOption = 
             CommandLine.makeBoolean("unitTest", false, CommandLineOption.Kind.STABLE, "Unit test mode for Balok tool");
 
+    public static final CommandLineOption<Boolean> offloadOption =
+			CommandLine.makeBoolean("offload", false, CommandLineOption.Kind.STABLE, "Enable offload race detection");
+
 	public static final StringMatcher toolCode = new StringMatcher(StringMatchResult.REJECT, "+acme..*", "+rr..*", "+java..*");
 
 	private static volatile boolean shuttingDown = false;
