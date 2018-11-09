@@ -1,0 +1,12 @@
+[
+{
+    "tid": 0,
+    "local": "{current:{0:4, 'lastJoin':3}, joins:{0:1, 1:1}}",
+    "barrier": "{}"
+},
+{
+    "tid": 1,
+    "local": "{current:{1:4, 'lastJoin':3}, joins:{0:3, 1:1}}",
+    "barrier": "{}"
+}
+]

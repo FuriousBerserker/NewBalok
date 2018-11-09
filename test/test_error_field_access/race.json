@@ -1,0 +1,8 @@
+[
+{
+    "type1": "READ",
+    "type2": "WRITE",
+    "access1": "Test.java:14",
+    "access2": "Test.java:8"
+}
+]
