@@ -18,22 +18,23 @@ public class SyncShadowLocation implements BalokShadowLocation {
     }
 
     public void add(TaskView view, AccessMode mode, SourceLocation loc, int  threadID) {
-        AccessEntry<MemoryAccess, Event<Epoch>> curr = new AccessEntry<>(new MemoryAccess(mode, loc, threadID), view);
+        MemoryAccess curr = new MemoryAccess(mode, loc, threadID);
         final AccessEntry<MemoryAccess, Epoch> prev;
-        System.out.println("Current: " + curr.getAccess() + " " + curr.getValue() + " " + tracker.hashCode());
         //if (tracker.lookupConflict(curr) != null) { // try a racy-check
             lock.lock();
             try {
-                prev = tracker.lookupConflict(curr);
+                EpochSet<MemoryAccess, Epoch> prevReads = tracker.getReads();
+                AccessEntry<MemoryAccess, Epoch> lastWrite =  tracker.getLastWrite();
+                prev = tracker.lookupConflict(lastWrite.getAccess(), lastWrite.getValue(), prevReads, curr, view);
                 if (prev != null) {
                     System.out.println("Race Detected!");
                     System.out.println("Access 1: " + prev.getAccess() + " " + prev.getValue());
-                    System.out.println("Access 2: " + curr.getAccess() + " " + curr.getValue());
+                    System.out.println("Access 2: " + curr + " " + view);
                     if (mode == AccessMode.WRITE) {
-                        tracker.unsafeAdd(curr);
+                        tracker.unsafeAdd(curr, view);
                     }
                 } else {
-                    tracker.unsafeAdd(curr);
+                    tracker.unsafeAdd(curr, view);
                 }
             } finally {
                 lock.unlock();

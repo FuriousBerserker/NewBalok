@@ -90,7 +90,7 @@ def compileSource(source):
         return True
 
 def runRoadrunner(entryClass):
-    result = subprocess.run(['../../build/bin/rrrun', '-tool=Balok', '-unitTest', '-noxml', '-quiet', '-noTidGC', entryClass], stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding='utf-8')
+    result = subprocess.run(['../../build/bin/rrrun', '-tool=Balok', '-unitTest', '-noxml', '-quiet', '-noTidGC', '-offload', entryClass], stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding='utf-8')
     if result.returncode != 0:
         print('output:')
         print(result.stdout)

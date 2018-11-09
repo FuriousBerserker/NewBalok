@@ -143,11 +143,10 @@ public class BalokTool extends Tool implements BarrierListener<BalokBarrierState
         if (parentST != null) {
             TaskTracker parentTask = ts_get_taskTracker(parentST);
             childTask = parentTask.createChild(currentST.getTid());
-            System.out.println(parentST.getTid() + " " + currentST.getTid());
             parentTask.afterSpawn();
         } else {
             // initial thread
-            childTask = new TaskTracker(currentST.getTid(), vcFactory.createController());
+            childTask = new TaskTracker(currentST.getTid(), vcFactory.createController(ne.getThread().getTid()));
             // When creating the instance of TaskTracker for the initial thread,
             // the timestamp starts from 1, so here we don't need to increase it again
             //childTask.produceEvent();
