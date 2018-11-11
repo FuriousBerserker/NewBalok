@@ -1,8 +1,9 @@
 package tools.balok;
 
+import balok.causality.TaskId;
 import balok.causality.TaskView;
 
-public class BalokVolatileState<T> {
+public class BalokVolatileState<T extends TaskId> {
 
     private TaskView<T> view;
 

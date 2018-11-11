@@ -17,36 +17,28 @@ public class SyncShadowLocation implements BalokShadowLocation {
         this.lock = new ReentrantLock();
     }
 
-    public void add(TaskView view, AccessMode mode, SourceLocation loc, int  threadID) {
+    public void add(TaskView view, AccessMode mode, SourceLocation loc, int threadID) {
         MemoryAccess<SourceLocation> curr = MemoryAccess.get(mode, loc, threadID);
         final AccessEntry<MemoryAccess, Epoch> prev;
-        //if (tracker.lookupConflict(curr) != null) { // try a racy-check
-            lock.lock();
-            try {
-                EpochSet<MemoryAccess, Epoch> prevReads = tracker.getReads();
-                AccessEntry<MemoryAccess, Epoch> lastWrite =  tracker.getLastWrite();
-                prev = tracker.lookupConflict(lastWrite == null ? null : lastWrite.getAccess(),
-                        lastWrite == null ? null : lastWrite.getValue(), prevReads, curr, view);
-                if (prev != null) {
-                    System.out.println("Race Detected!");
-                    System.out.println("Access 1: " + prev.getAccess() + " " + prev.getValue());
-                    System.out.println("Access 2: " + curr + " " + view);
-                    if (mode == AccessMode.WRITE) {
-                        tracker.unsafeAdd(curr, view);
-                    }
-                } else {
+        lock.lock();
+        try {
+            EpochSet<MemoryAccess, Epoch> prevReads = tracker.getReads();
+            AccessEntry<MemoryAccess, Epoch> lastWrite = tracker.getLastWrite();
+            prev = tracker.lookupConflict(lastWrite == null ? null : lastWrite.getAccess(),
+                    lastWrite == null ? null : lastWrite.getValue(), prevReads, curr, view);
+            System.out.println(curr + " " + view);
+            if (prev != null) {
+                System.out.println("Race Detected!");
+                System.out.println("Access 1: " + prev.getAccess() + " " + prev.getValue());
+                System.out.println("Access 2: " + curr + " " + view);
+                if (mode == AccessMode.WRITE) {
                     tracker.unsafeAdd(curr, view);
                 }
-            } finally {
-                lock.unlock();
+            } else {
+                tracker.unsafeAdd(curr, view);
             }
-//        } else {
-//            lock.lock();
-//            try {
-//                tracker.unsafeAdd(curr);
-//            } finally {
-//                lock.unlock();
-//            }
-//        }
+        } finally {
+            lock.unlock();
+        }
     }
 }
