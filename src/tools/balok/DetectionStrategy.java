@@ -7,6 +7,8 @@ import balok.causality.async.ShadowMemory;
 import org.jctools.queues.MpscUnboundedArrayQueue;
 import rr.tool.RR;
 
+import java.io.FileNotFoundException;
+import java.io.PrintWriter;
 import java.util.List;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -41,6 +43,7 @@ public enum DetectionStrategy {
         private Offload offload = new Offload();
 
         private Thread raceDetectionThread = new Thread(offload);
+
         @Override
         public BalokShadowLocation createShadowLocation() {
             return new AsyncShadowLocation();
@@ -123,7 +126,121 @@ public enum DetectionStrategy {
                 Util.println("Offload race detection is done, tackle " + tasks.size() + " locations in parallel");
             }
         }
+    },
+
+    OFFLINE {
+        private MpscUnboundedArrayQueue<ShadowMemory> queue = new MpscUnboundedArrayQueue<>(128);
+
+        private Offload offload = new Offload();
+
+        private Thread raceDetectionThread = new Thread(offload);
+
+        @Override
+        public BalokShadowLocation createShadowLocation() {
+            return new AsyncShadowLocation();
+        }
+
+        @Override
+        public MemoryTracker createMemoryTracker() {
+            return new AsyncMemoryTracker(queue);
+        }
+
+        @Override
+        public void init() {
+            offload.init();
+            raceDetectionThread.start();
+        }
+
+        @Override
+        public void fini() {
+            offload.end();
+            try {
+                raceDetectionThread.join();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
+
+        class Offload implements Runnable {
+
+            private final AtomicBoolean isEnd;
+
+            private String eventFile;
+
+            private PrintWriter writer;
+
+            private long period;
+
+            public Offload() {
+                isEnd = new AtomicBoolean(false);
+                eventFile = "access.log";
+                try {
+                    writer = new PrintWriter(eventFile);
+                } catch (FileNotFoundException e) {
+                    e.printStackTrace();
+                    System.exit(1);
+                }
+                period = 1000;
+            }
+
+            public void init() {
+
+            }
+
+            public void end() {
+                isEnd.set(true);
+            }
+
+            @Override
+            public void run() {
+                while (!isEnd.get()) {
+                    if (!queue.isEmpty()) {
+                        queue.drain(this::raceDetection);
+                    }
+                    try {
+                        Thread.sleep(period);
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+                }
+                // guarantee all data is analyzed
+                if (!queue.isEmpty()) {
+                    queue.drain(this::raceDetection);
+                }
+
+                writer.close();
+            }
+
+            public void raceDetection(ShadowMemory<MemoryAccess, Epoch> other) {
+                writer.println(other);
+            }
+        }
+    },
+
+    TEST {
+        private MpscUnboundedArrayQueue<ShadowMemory> queue = new MpscUnboundedArrayQueue<>(128);
+
+        @Override
+        public BalokShadowLocation createShadowLocation() {
+            return new AsyncShadowLocation();
+        }
+
+        @Override
+        public MemoryTracker createMemoryTracker() {
+            return new AsyncMemoryTracker(queue);
+        }
+
+        @Override
+        public void init() {
+
+        }
+
+        @Override
+        public void fini() {
+
+        }
     };
+
     public abstract BalokShadowLocation createShadowLocation();
 
     public abstract MemoryTracker createMemoryTracker();

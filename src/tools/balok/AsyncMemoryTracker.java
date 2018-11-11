@@ -37,7 +37,8 @@ public class AsyncMemoryTracker implements MemoryTracker {
         if (!key.loc.tryAdd(acc, ticket)) {
             currentFrame.add(key.loc, acc, ticket);
             if (currentFrame.isFull()) {
-                queue.add(currentFrame.build());
+                currentFrame.build();
+                //queue.add(currentFrame.build());
             }
         }
     }
