@@ -3,10 +3,12 @@ package tools.balok;
 import acme.util.Util;
 import balok.causality.Epoch;
 import balok.causality.MemoryAccess;
+import balok.causality.async.Frame;
 import balok.causality.async.ShadowMemory;
 import org.jctools.queues.MpscUnboundedArrayQueue;
 import rr.tool.RR;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -36,7 +38,7 @@ public enum DetectionStrategy {
     },
 
     ASYNC {
-        private MpscUnboundedArrayQueue<ShadowMemory> queue = new MpscUnboundedArrayQueue<>(128);
+        private MpscUnboundedArrayQueue<Frame<MemoryAccess, Epoch>> queue = new MpscUnboundedArrayQueue<>(128);
 
         private Offload offload = new Offload();
 
@@ -96,14 +98,20 @@ public enum DetectionStrategy {
             public void run() {
                 while (!isEnd.get()) {
                     if (!queue.isEmpty()) {
-                        queue.drain(this::raceDetection);
+                        doRaceDetection();
                     }
                 }
                 // guarantee all data is analyzed
                 if (!queue.isEmpty()) {
-                    queue.drain(this::raceDetection);
+                    doRaceDetection();
                     pool.shutdown();
                 }
+            }
+
+            public void doRaceDetection() {
+                ArrayList<Frame<MemoryAccess, Epoch>> frames = new ArrayList<>();
+                queue.drain(frames::add);
+                raceDetection(ShadowMemory.parallelBuildFrom(frames));
             }
 
             public void raceDetection(ShadowMemory<MemoryAccess, Epoch> other) {

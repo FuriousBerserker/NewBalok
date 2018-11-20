@@ -1,24 +1,27 @@
 package tools.balok;
 
 import balok.causality.*;
+import balok.causality.async.Frame;
+import balok.causality.async.FrameBuilder;
 import balok.causality.async.ShadowMemory;
 import balok.causality.async.ShadowMemoryBuilder;
 import org.jctools.queues.MpscUnboundedArrayQueue;
 import rr.meta.SourceLocation;
 
 import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class AsyncMemoryTracker implements MemoryTracker {
     private static final AtomicInteger codeGen = new AtomicInteger(Integer.MIN_VALUE);
     private final int code = codeGen.getAndIncrement();
-    private ShadowMemoryBuilder<MemoryAccess, Epoch> currentFrame = new ShadowMemoryBuilder<>(512);
+    private FrameBuilder<MemoryAccess, Epoch> currentFrame = new FrameBuilder<>(512);
     private AtomicBoolean active = new AtomicBoolean(true);
 
-    private final MpscUnboundedArrayQueue<ShadowMemory> queue;
+    private final MpscUnboundedArrayQueue<Frame<MemoryAccess, Epoch>> queue;
 
-    public AsyncMemoryTracker(MpscUnboundedArrayQueue<ShadowMemory> queue) {
+    public AsyncMemoryTracker(MpscUnboundedArrayQueue<Frame<MemoryAccess, Epoch>> queue) {
         this.queue = queue;
     }
 
@@ -49,17 +52,11 @@ public class AsyncMemoryTracker implements MemoryTracker {
 
     @Override
     public void onEnd(TaskTracker tracker) {
-        ShadowMemory frame = currentFrame.isEmpty() ? null : currentFrame.build();
+        Frame frame = currentFrame.isEmpty() ? null : currentFrame.build();
         if (frame != null) {
             queue.add(frame);
         }
         active.set(false);
-    }
-
-    public ArrayList<ShadowMemory<MemoryAccess, Epoch>> consume() {
-        ArrayList<ShadowMemory<MemoryAccess, Epoch>> result = new ArrayList<>();
-        queue.drain(result::add);
-        return result;
     }
 
     @Override
