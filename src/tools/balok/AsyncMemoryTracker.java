@@ -34,11 +34,12 @@ public class AsyncMemoryTracker implements MemoryTracker {
     public void onAccess(TaskTracker tracker, BalokShadowLocation loc, AccessMode mode, SourceLocation info, int threadID) {
         //TODO: ADD DEBUGGING INFO
         AsyncShadowLocation key = (AsyncShadowLocation) loc;
-        AccessEntry<MemoryAccess, Event<Epoch>> acc = new AccessEntry<>(MemoryAccess.get(mode, info, threadID), tracker.createTimestamp());
+        MemoryAccess<SourceLocation> src = MemoryAccess.get(mode, info, threadID);
+        TaskView vc = tracker.createTimestamp();
         int ticket = key.loc.createTicket();
         //System.out.println(ticket + ", " + (mode == AccessMode.READ ? 0 : 1) + ", " + tracker.createTimestamp().toString());
-        if (!key.loc.tryAdd(acc, ticket)) {
-            currentFrame.add(key.loc, acc, ticket);
+        if (!key.loc.tryAdd(src, vc, ticket)) {
+            currentFrame.add(key.loc, new AccessEntry<>(src, vc), ticket);
             if (currentFrame.isFull()) {
                 queue.add(currentFrame.build());
             }
