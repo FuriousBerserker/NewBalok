@@ -38,7 +38,7 @@ public enum DetectionStrategy {
     },
 
     ASYNC {
-        private MpscUnboundedArrayQueue<Frame<MemoryAccess, Epoch>> queue = new MpscUnboundedArrayQueue<>(128);
+        private MpscUnboundedArrayQueue<Frame<Epoch>> queue = new MpscUnboundedArrayQueue<>(128);
 
         private Offload offload = new Offload();
 
@@ -71,7 +71,7 @@ public enum DetectionStrategy {
 
         class Offload implements Runnable {
 
-            private ShadowMemory<MemoryAccess, Epoch> history;
+            private ShadowMemory<Epoch> history;
 
             private ExecutorService pool;
 
@@ -109,12 +109,12 @@ public enum DetectionStrategy {
             }
 
             public void doRaceDetection() {
-                ArrayList<Frame<MemoryAccess, Epoch>> frames = new ArrayList<>();
+                ArrayList<Frame<Epoch>> frames = new ArrayList<>();
                 queue.drain(frames::add);
                 raceDetection(ShadowMemory.parallelBuildFrom(frames));
             }
 
-            public void raceDetection(ShadowMemory<MemoryAccess, Epoch> other) {
+            public void raceDetection(ShadowMemory<Epoch> other) {
                 List< Callable<Object> > tasks = history.generateParallelAddTask(other);
                 try {
                     List<Future<Object>> futures = pool.invokeAll(tasks);

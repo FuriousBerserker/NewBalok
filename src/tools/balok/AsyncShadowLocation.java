@@ -6,5 +6,5 @@ import balok.causality.async.AsyncLocationTracker;
 import rr.state.ShadowVar;
 
 public class AsyncShadowLocation implements BalokShadowLocation {
-    AsyncLocationTracker<MemoryAccess, Epoch> loc = new AsyncLocationTracker<>();
+    AsyncLocationTracker<Epoch> loc = new AsyncLocationTracker<>();
 }
