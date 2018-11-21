@@ -26,10 +26,9 @@ public class SyncShadowLocation implements BalokShadowLocation {
             prev = tracker.lookupConflict(lastWrite == null ? null : lastWrite.getAccess(),
                     lastWrite == null ? null : lastWrite.getValue(), prevReads, mode, view);
             if (prev != null) {
-                MemoryAccess<SourceLocation> curr = MemoryAccess.get(mode, loc, threadID);
                 System.out.println("Race Detected!");
                 System.out.println("Access 1: " + prev.getAccess() + " " + prev.getValue());
-                System.out.println("Access 2: " + curr + " " + view);
+                System.out.println("Access 2: " + mode + " " + view);
                 if (mode == AccessMode.WRITE) {
                     tracker.unsafeAdd(mode, view);
                 }
