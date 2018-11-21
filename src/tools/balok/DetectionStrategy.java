@@ -2,7 +2,6 @@ package tools.balok;
 
 import acme.util.Util;
 import balok.causality.Epoch;
-import balok.causality.MemoryAccess;
 import balok.causality.async.Frame;
 import balok.causality.async.ShadowMemory;
 import org.jctools.queues.MpscUnboundedArrayQueue;
