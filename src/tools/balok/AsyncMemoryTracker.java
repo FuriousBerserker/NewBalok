@@ -43,6 +43,7 @@ public class AsyncMemoryTracker implements MemoryTracker {
             if (currentFrame.isFull()) {
                 queue.add(currentFrame.build());
             }
+        }
     }
 
     @Override
