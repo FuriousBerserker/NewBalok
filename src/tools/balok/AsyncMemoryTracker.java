@@ -38,21 +38,11 @@ public class AsyncMemoryTracker implements MemoryTracker {
         TaskView vc = tracker.createTimestamp();
         int ticket = key.loc.createTicket();
         //System.out.println(ticket + ", " + (mode == AccessMode.READ ? 0 : 1) + ", " + tracker.createTimestamp().toString());
-        Optional<AccessEntry> result = key.loc.tryAdd(mode, vc, ticket);
-        if (result.isEmpty()) {
-            // Successfully added
+        if (!key.loc.tryAdd(mode, vc, ticket)) {
             currentFrame.add(key.loc, mode, vc, ticket);
             if (currentFrame.isFull()) {
                 queue.add(currentFrame.build());
             }
-        } else {
-            AccessEntry conflict = result.get();
-            if (conflict != null) {
-                System.out.println("Race Detected!");
-                System.out.println("Access 1: " + conflict.getAccess() + " " + conflict.getValue());
-                System.out.println("Access 2: " + mode + " " + vc);
-            }
-        }
     }
 
     @Override
