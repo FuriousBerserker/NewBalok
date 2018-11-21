@@ -82,6 +82,7 @@ import acme.util.io.XMLWriter;
 import acme.util.option.CommandLine;
 import acme.util.option.CommandLineOption;
 import acme.util.time.TimedStmt;
+import tools.balok.DetectionStrategy;
 
 public class RR {
 
@@ -168,8 +169,8 @@ public class RR {
     public static final CommandLineOption<Boolean> unitTestOption = 
             CommandLine.makeBoolean("unitTest", false, CommandLineOption.Kind.STABLE, "Unit test mode for Balok tool");
 
-    public static final CommandLineOption<Boolean> offloadOption =
-			CommandLine.makeBoolean("offload", false, CommandLineOption.Kind.STABLE, "Enable offload race detection");
+    public static final CommandLineOption<String> offloadOption =
+			CommandLine.makeString("offload", DetectionStrategy.ASYNC.toString(), CommandLineOption.Kind.STABLE, "Enable offload race detection");
 
 	public static final StringMatcher toolCode = new StringMatcher(StringMatchResult.REJECT, "+acme..*", "+rr..*", "+java..*");
 

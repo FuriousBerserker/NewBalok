@@ -113,13 +113,8 @@ public class BalokTool extends Tool implements BarrierListener<BalokBarrierState
     @Override
     public void init() {
         Util.println("Balok start");
-        if (RR.offloadOption.get()) {
-            Util.println("Offload race detection enabled");
-            memFactory = DetectionStrategy.ASYNC;
-        } else {
-            Util.println("Offload race detection disabled");
-            memFactory = DetectionStrategy.SYNC;
-        }
+        Util.println("Offload race detection mode: " + RR.offloadOption.get());
+        memFactory = DetectionStrategy.valueOf(RR.offloadOption.get());
         memFactory.init();
         super.init();
     }

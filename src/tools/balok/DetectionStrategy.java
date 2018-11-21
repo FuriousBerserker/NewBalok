@@ -14,6 +14,28 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 public enum DetectionStrategy {
 
+    NOCHECK {
+        @Override
+        public BalokShadowLocation createShadowLocation() {
+            return NoCheckMemoryTracker.NO_CHECK;
+        }
+
+        @Override
+        public MemoryTracker createMemoryTracker() {
+            return new NoCheckMemoryTracker();
+        }
+
+        @Override
+        public void init() {
+            // nothing to do
+        }
+
+        @Override
+        public void fini() {
+            // nothing to do
+        }
+    },
+
     SYNC {
         @Override
         public BalokShadowLocation createShadowLocation() {
