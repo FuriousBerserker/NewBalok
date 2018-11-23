@@ -19,6 +19,14 @@ public class SyncShadowLocation implements BalokShadowLocation {
 
     public void add(Event<Epoch> view, AccessMode mode, SourceLocation loc, int threadID) {
         final AccessEntry<Epoch> prev;
+        EpochSet<Epoch> reads = tracker.getReads();
+        if (mode == AccessMode.READ && reads.mayContain(view)) {
+            return;
+        }
+        Epoch w = tracker.getLastWrite();
+        if (mode == AccessMode.WRITE && w != null && view.observe(w) == Causality.SOME_EQ) {
+            return;
+        }
         lock.lock();
         try {
             EpochSet<Epoch> prevReads = tracker.getReads();
