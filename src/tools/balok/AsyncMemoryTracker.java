@@ -34,6 +34,13 @@ public class AsyncMemoryTracker implements MemoryTracker {
     @Override
     public void onAccess(TaskTracker tracker, BalokShadowLocation loc, AccessMode mode, SourceLocation info, int threadID) {
         //TODO: ADD DEBUGGING INFO
+        if (mode == AccessMode.READ) {
+            if (tracker.containsRead(loc)) {
+                return;
+            } else {
+                tracker.cacheRead(loc);
+            }
+        }
         AsyncShadowLocation key = (AsyncShadowLocation) loc;
         TaskView vc = tracker.createTimestamp();
         int ticket = key.loc.createTicket();
