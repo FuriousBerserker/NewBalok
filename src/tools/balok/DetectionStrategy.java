@@ -132,7 +132,11 @@ public enum DetectionStrategy {
             public void doRaceDetection() {
                 ArrayList<Frame<Epoch>> frames = new ArrayList<>();
                 queue.drain(frames::add);
-                raceDetection(ShadowMemory.parallelBuildFrom(frames));
+                int size = frames.size();
+                long start = System.currentTimeMillis();
+                //Util.println("Read " + size + " frames");
+                history.addAll(frames);
+                Util.println("Added " + size + " frames into shared memory in " + ((System.currentTimeMillis() - start)) + "ms" );
             }
 
             public void raceDetection(ShadowMemory<Epoch> other) {
