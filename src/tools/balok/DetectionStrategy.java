@@ -137,9 +137,6 @@ public enum DetectionStrategy {
                 for (Frame<Epoch> frame : frames) {
                     frame.addTo(history);
                 }
-                int size = history.size();
-                long elapsed = System.currentTimeMillis() - start;
-                Util.println("Added " + frameCount + " frames into shared memory in " + elapsed + "ms shmem size: " +  size);
             }
 
             public void raceDetection(ShadowMemory<Epoch> other) {
