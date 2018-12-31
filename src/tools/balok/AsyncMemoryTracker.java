@@ -7,6 +7,7 @@ import balok.causality.async.ShadowMemory;
 import balok.causality.async.ShadowMemoryBuilder;
 import org.jctools.queues.MpscUnboundedArrayQueue;
 import rr.meta.SourceLocation;
+import rr.tool.RR;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -43,6 +44,9 @@ public class AsyncMemoryTracker implements MemoryTracker {
         }
         AsyncShadowLocation key = (AsyncShadowLocation) loc;
         TaskView vc = tracker.createTimestamp();
+        if (RR.unitTestOption.get()) {
+            vc = new TaskViewForDebug(vc.getLocal(), vc.getCyclic(), info);
+        }
         int ticket = key.loc.createTicket();
         //System.out.println(ticket + ", " + (mode == AccessMode.READ ? 0 : 1) + ", " + tracker.createTimestamp().toString());
         if (!key.loc.tryAdd(mode, vc, ticket)) {

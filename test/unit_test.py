@@ -3,6 +3,7 @@ import subprocess
 import os
 import json
 import sys
+import getopt
 
 rootDir = os.path.dirname(os.path.realpath(__file__)) 
 testPrefix = 'test'
@@ -210,7 +211,7 @@ def checkRace(testCaseName, output):
                 #print(len(info1), len(info2))
                 #print(info1)
                 #print(info2)
-                race = Race(info1[4], info2[4], info1[5][:info1[5].rindex(':')], info2[5][:info2[5].rindex(':')])
+                race = Race(info1[2], info2[2], info1[3][:info1[3].rindex(':')], info2[3][:info2[3].rindex(':')])
                 raceList.append(race)
         except StopIteration:
             break
@@ -259,7 +260,9 @@ def unitTest(testCaseName):
             return
             
     executeSyncSuccess, stdout, stderr = runRoadrunner(testClass, ['-tool=Balok', '-unitTest', '-noxml', '-quiet', '-noTidGC'])
-    executeAsyncSuccess, stdout2, stderr2 = runRoadrunner(testClass, ['-tool=Balok', '-unitTest', '-noxml', '-quiet', '-noTidGC', '-offload'])
+    executeAsyncSuccess, stdout2, stderr2 = runRoadrunner(testClass, ['-tool=Balok', '-unitTest', '-noxml', '-quiet', '-noTidGC', '-offload=ASYNC'])
+    #print(stdout2)
+    #print(stderr2)
     if executeSyncSuccess and executeAsyncSuccess:
         print('check synchronous race detection')
         passSyncVCChecking, message = checkVC(testCaseName, stdout)
@@ -282,32 +285,55 @@ def unitTest(testCaseName):
         error += 1
         errorTests.append(testCaseName)
 
-def main():
+def main(argv):
     if not checkPythonVersion(3, 6):
-        print("require Python 3.6+")
+        print('require Python 3.6+')
         exit(1)
-    os.chdir(rootDir)
-    print('Start unit test for Balok')
-    testCases = [o for o in os.listdir(rootDir) if os.path.isdir(os.path.join(rootDir,o)) and o.startswith(testPrefix)]
-    print('test cases: ', testCases)
-    print(segment)
-    for testCase in testCases:
-       os.chdir(testCase)
-       #print(testCase)
-       unitTest(testCase)
-       os.chdir('../')
-       print(segment)
+    try:
+        opts, args = getopt.getopt(argv, 't:')
+    except getopt.GetoptError:
+        print('unit_test.py [-t testcase]')
+        exit(1)
 
-    if error == 0 and fail == 0:
-        print('Pass all test cases')
+    isTestCaseSet = False
+    for opt, arg in opts:
+        if opt == '-t':
+            isTestCaseSet = True
+            testCase = arg
+            break
+
+    if isTestCaseSet:
+        os.chdir(rootDir)
+        print('Start unit test ' + testCase)
+        if (testCase in os.listdir(rootDir) and testCase.startswith(testPrefix)):
+            print(segment)
+            os.chdir(testCase)
+            unitTest(testCase)
+        else:
+            print(testCase + ' does not exist')
     else:
-        print('Unit test failed')
-        print('Error test cases:', errorTests)
-        print('Failed test cases:', failTests)
+        os.chdir(rootDir)
+        print('Start unit test for Balok')
+        testCases = [o for o in os.listdir(rootDir) if os.path.isdir(os.path.join(rootDir,o)) and o.startswith(testPrefix)]
+        print('test cases: ', testCases)
+        print(segment)
+        for testCase in testCases:
+            os.chdir(testCase)
+            #print(testCase)
+            unitTest(testCase)
+            os.chdir('../')
+        print(segment)
 
-    #print(f'error: {error}, fail: {fail}, success: {success}' )
-    print('error: {:d}, fail: {:d}, success: {:d}'.format(error, fail, success))
-    print('Complete unit test')
+        if error == 0 and fail == 0:
+            print('Pass all test cases')
+        else:
+            print('Unit test failed')
+            print('Error test cases:', errorTests)
+            print('Failed test cases:', failTests)
+
+            #print(f'error: {error}, fail: {fail}, success: {success}' )
+            print('error: {:d}, fail: {:d}, success: {:d}'.format(error, fail, success))
+            print('Complete unit test')
    
 if __name__ == '__main__':
-    main()
+    main(sys.argv[1:])
