@@ -48,7 +48,7 @@ public class AsyncMemoryTracker implements MemoryTracker {
             vc = new TaskViewForDebug(vc.getLocal(), vc.getCyclic(), info);
         }
         int ticket = key.loc.createTicket();
-        //System.out.println(ticket + ", " + (mode == AccessMode.READ ? 0 : 1) + ", " + tracker.createTimestamp().toString());
+        //System.out.println(key.loc.hashCode() + ", " + ticket + ", " + (mode == AccessMode.READ ? 0 : 1) + ", " + tracker.createTimestamp().toString() + ", " + info);
         if (!key.loc.tryAdd(mode, vc, ticket)) {
             currentFrame.add(key.loc, mode, vc, ticket);
             if (currentFrame.isFull()) {

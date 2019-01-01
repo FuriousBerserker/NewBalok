@@ -33,7 +33,7 @@ import rr.meta.ArrayAccessInfo;
 import rr.meta.FieldInfo;
 
 import java.util.concurrent.atomic.AtomicInteger;
-
+import java.util.concurrent.Phaser;
 // finished: getResource, ShodowMemoryBuilder, tick
 // finished: VectorEpoch.join, wait/notify, should we do a FT3
 // finished: wait/notify acquire/release barrier
@@ -44,6 +44,8 @@ public class BalokTool extends Tool implements BarrierListener<BalokBarrierState
     // TODO: Currently we just hardcode the memFactory. Later we will get it from program properties
 
     private DetectionStrategy memFactory = null;
+
+    private Phaser phaser = new Phaser(1);
 
     private final PtpCausalityFactory vcFactory = PtpCausalityFactory.VECTOR_MUT;
 
@@ -69,7 +71,6 @@ public class BalokTool extends Tool implements BarrierListener<BalokBarrierState
 
     public BalokTool(String name, Tool next, CommandLine commandLine) {
         super(name, next, commandLine);
-        System.out.println("balok created");
         new BarrierMonitor<BalokBarrierState>(this, new DefaultValue<Object, BalokBarrierState>() {
             AtomicInteger barrierIDGen = new AtomicInteger();
             @Override
@@ -121,13 +122,14 @@ public class BalokTool extends Tool implements BarrierListener<BalokBarrierState
 
     @Override
     public void fini() {
+        phaser.arriveAndAwaitAdvance();
         memFactory.fini();
         Util.println("Balok end");
         super.fini();
     }
 
     // Need to initialize the taskTracker and memoryTracker for every thread
-    // Since roadrunner doesn't call preStart method for the initial thread, we override create rather than preStart
+    // Since roadrunner doesn't call preStart method for the initial thread, we override create() rather than preStart()
     @Override
     public void create(NewThreadEvent ne) {
         // Initialize taskTracker and memoryTracker
@@ -149,6 +151,7 @@ public class BalokTool extends Tool implements BarrierListener<BalokBarrierState
         childMem = memFactory.createMemoryTracker();
         ts_set_taskTracker(currentST, childTask);
         ts_set_memTracker(currentST, childMem);
+        phaser.register();
         // Keep this hook for SyncMemoryChecker
         childMem.onSyncEvent(childTask);
         super.create(ne);
@@ -162,6 +165,7 @@ public class BalokTool extends Tool implements BarrierListener<BalokBarrierState
         if (RR.unitTestOption.get()) {
            Util.printf(task.toString()); 
         }
+        phaser.arriveAndDeregister();
         //TODO: shall we set task and mem to null to help garbage collection?
         super.stop(td);
     }
@@ -239,8 +243,9 @@ public class BalokTool extends Tool implements BarrierListener<BalokBarrierState
         final TaskTracker task = ts_get_taskTracker(vae.getThread());
         final BalokVolatileState volatileV = volatileVs.get(vae.getShadowVolatile());
         if (vae.isWrite()) {
-                volatileV.setView(task.createTimestamp());
-                task.produceEvent();
+            //TODO: buggy code, each thread should only overwrite its own epoch
+            volatileV.setView(task.createTimestamp());
+            task.produceEvent();
         } else {
             if (volatileV.getView() != null) {
                 task.join(volatileV.getView());

@@ -60,7 +60,7 @@ public enum DetectionStrategy {
 
     ASYNC {
         private MpscUnboundedArrayQueue<Frame<Epoch>> queue = new MpscUnboundedArrayQueue<>(128);
-
+ 
         private Offload offload = new Offload();
 
         private Thread raceDetectionThread = new Thread(offload);
