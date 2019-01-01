@@ -44,6 +44,10 @@ public class AsyncMemoryTracker implements MemoryTracker {
         }
         AsyncShadowLocation key = (AsyncShadowLocation) loc;
         TaskView vc = tracker.createTimestamp();
+        // A fast-path for checking if the thread already touched the shadow location (remove dups)
+        if (key.loc.alreadyIn(mode, vc)) {
+            return;
+        }
         if (RR.unitTestOption.get()) {
             vc = new TaskViewForDebug(vc.getLocal(), vc.getCyclic(), info);
         }
