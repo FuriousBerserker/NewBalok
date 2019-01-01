@@ -23,6 +23,7 @@ successTests = []
 failTests = []
 errorTests = []
 generateLog = False
+verbose = False
 
 class VC:
 
@@ -261,8 +262,9 @@ def unitTest(testCaseName):
             
     executeSyncSuccess, stdout, stderr = runRoadrunner(testClass, ['-tool=Balok', '-unitTest', '-noxml', '-quiet', '-noTidGC'])
     executeAsyncSuccess, stdout2, stderr2 = runRoadrunner(testClass, ['-tool=Balok', '-unitTest', '-noxml', '-quiet', '-noTidGC', '-offload=ASYNC'])
-    #print(stdout2)
-    #print(stderr2)
+    if verbose:
+        print(stdout2)
+        print(stderr2)
     if executeSyncSuccess and executeAsyncSuccess:
         print('check synchronous race detection')
         passSyncVCChecking, message = checkVC(testCaseName, stdout)
@@ -286,11 +288,12 @@ def unitTest(testCaseName):
         errorTests.append(testCaseName)
 
 def main(argv):
+    global verbose
     if not checkPythonVersion(3, 6):
         print('require Python 3.6+')
         exit(1)
     try:
-        opts, args = getopt.getopt(argv, 't:')
+        opts, args = getopt.getopt(argv, 't:v')
     except getopt.GetoptError:
         print('unit_test.py [-t testcase]')
         exit(1)
@@ -300,7 +303,9 @@ def main(argv):
         if opt == '-t':
             isTestCaseSet = True
             testCase = arg
-            break
+        elif opt == '-v':
+            verbose = True
+            
 
     if isTestCaseSet:
         os.chdir(rootDir)
