@@ -322,9 +322,11 @@ def main(argv):
         testCases = [o for o in os.listdir(rootDir) if os.path.isdir(os.path.join(rootDir,o)) and o.startswith(testPrefix)]
         print('test cases: ', testCases)
         print(segment)
-        for testCase in testCases:
+        for index, testCase in enumerate(testCases):
             os.chdir(testCase)
             #print(testCase)
+            if index != 0:
+                print()
             unitTest(testCase)
             os.chdir('../')
         print(segment)
