@@ -228,7 +228,6 @@ public class BalokTool extends Tool implements BarrierListener<BalokBarrierState
             BalokShadowLocation shadow = (BalokShadowLocation)ae.getOriginalShadow();
             TaskTracker task = ts_get_taskTracker(ae.getThread());
             MemoryTracker mem = ts_get_memTracker(ae.getThread());
-            //TODO: Need to convert the type of debug info between RoadRunner and Balok
             mem.onAccess(task, shadow, ae.isWrite() ? AccessMode.WRITE : AccessMode.READ,
                     ae.getAccessInfo().getLoc(), ae.getThread().getTid());
         } else {
