@@ -19,6 +19,8 @@ import java.io.Serializable;
 
 public class MemoryAccess implements Serializable {
 
+    private static final long serialVersionUID = 4L;
+
     private AccessMode mode;
 
     private int address;

@@ -27,6 +27,7 @@ public class AsyncMemoryTracker implements MemoryTracker {
     private final int code = codeGen.getAndIncrement();
     private FrameBuilder<Epoch> currentFrame = new FrameBuilder<>(512);
     private AtomicBoolean active = new AtomicBoolean(true);
+    private AtomicInteger accessNum = new AtomicInteger(0);
 
     private final MpscUnboundedArrayQueue<Frame<Epoch>> queue;
 
@@ -71,6 +72,7 @@ public class AsyncMemoryTracker implements MemoryTracker {
         int ticket = key.loc.createTicket();
         //System.out.println(key.loc.hashCode() + ", " + ticket + ", " + (mode == AccessMode.READ ? 0 : 1) + ", " + tracker.createTimestamp().toString() + ", " + info);
         if (RR.outputAccessOption.get()) {
+            accessNum.incrementAndGet();
             MemoryAccess ma = new MemoryAccess(mode, key.loc.hashCode(), threadID, ticket, vc, info.getFile(), info.getLine(), info.getOffset());
             synchronized (accessStream) {
                 try {
@@ -101,6 +103,14 @@ public class AsyncMemoryTracker implements MemoryTracker {
             queue.add(frame);
         }
         active.set(false);
+        if (RR.outputAccessOption.get()) {
+            try {
+                accessStream.close();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+            System.out.println("Total number of memory accesses: " + accessNum.get());
+        }
     }
 
     @Override
