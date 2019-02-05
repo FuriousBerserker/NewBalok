@@ -11,6 +11,12 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.ObjectOutputStream;
 
 public enum DetectionStrategy {
 
@@ -64,6 +70,9 @@ public enum DetectionStrategy {
         private Offload offload = new Offload();
 
         private Thread raceDetectionThread = new Thread(offload);
+
+        private ArrayList<MemoryAccess> accesses = new ArrayList<>();
+
         @Override
         public BalokShadowLocation createShadowLocation() {
             return new AsyncShadowLocation();
@@ -71,7 +80,7 @@ public enum DetectionStrategy {
 
         @Override
         public MemoryTracker createMemoryTracker() {
-            return new AsyncMemoryTracker(queue);
+            return new AsyncMemoryTracker(queue, accesses);
         }
 
         @Override
@@ -82,6 +91,18 @@ public enum DetectionStrategy {
 
         @Override
         public void fini() {
+            if (RR.outputAccessOption.get()) {
+                DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyMMdd-HHmmss").withZone(ZoneId.of("GMT-5"));
+                // TODO: We need an initializer to decide the initialization of accessStream
+                try {
+                    ObjectOutputStream accessStream = new ObjectOutputStream(new FileOutputStream("access-" + formatter.format(Instant.now()) + ".log"));
+                    accessStream.writeObject(accesses);
+                    accessStream.close();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+                System.out.println("Number of memory accesses: " + accesses.size());
+            }
             offload.end();
             try {
                 raceDetectionThread.join();

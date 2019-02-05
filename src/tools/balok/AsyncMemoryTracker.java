@@ -9,40 +9,25 @@ import org.jctools.queues.MpscUnboundedArrayQueue;
 import rr.meta.SourceLocation;
 import rr.tool.RR;
 
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.ObjectOutputStream;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.time.Instant;
-import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
 
 public class AsyncMemoryTracker implements MemoryTracker {
     private static final AtomicInteger codeGen = new AtomicInteger(Integer.MIN_VALUE);
     private final int code = codeGen.getAndIncrement();
     private FrameBuilder<Epoch> currentFrame = new FrameBuilder<>(512);
     private AtomicBoolean active = new AtomicBoolean(true);
-    private AtomicInteger accessNum = new AtomicInteger(0);
 
     private final MpscUnboundedArrayQueue<Frame<Epoch>> queue;
 
-    private ObjectOutputStream accessStream;
-    private ArrayList<MemoryAccess> accesses = new ArrayList<>();
+    private final ArrayList<MemoryAccess> accesses;
 
-    public AsyncMemoryTracker(MpscUnboundedArrayQueue<Frame<Epoch>> queue) {
+    public AsyncMemoryTracker(MpscUnboundedArrayQueue<Frame<Epoch>> queue, ArrayList<MemoryAccess> accesses) {
         this.queue = queue;
-        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyMMdd-HHmmss").withZone(ZoneId.of("GMT-5"));
-        // TODO: We need an initializer to decide the initialization of accessStream
-        try {
-            this.accessStream = new ObjectOutputStream(new FileOutputStream("access-" + formatter.format(Instant.now()) + ".log"));
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+        this.accesses = accesses;
     }
 
     @Override
@@ -73,9 +58,8 @@ public class AsyncMemoryTracker implements MemoryTracker {
         int ticket = key.loc.createTicket();
         //System.out.println(key.loc.hashCode() + ", " + ticket + ", " + (mode == AccessMode.READ ? 0 : 1) + ", " + tracker.createTimestamp().toString() + ", " + info);
         if (RR.outputAccessOption.get()) {
-            accessNum.incrementAndGet();
             MemoryAccess ma = new MemoryAccess(mode, key.loc.hashCode(), threadID, ticket, vc, info.getFile(), info.getLine(), info.getOffset());
-            synchronized (accessStream) {
+            synchronized (accesses) {
                 accesses.add(ma);
             }
         } else {
@@ -100,15 +84,6 @@ public class AsyncMemoryTracker implements MemoryTracker {
             queue.add(frame);
         }
         active.set(false);
-        if (RR.outputAccessOption.get()) {
-            try {
-                accessStream.writeObject(accesses);
-                accessStream.close();
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-            System.out.println("Total number of memory accesses: " + accessNum.get());
-        }
     }
 
     @Override
