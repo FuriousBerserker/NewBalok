@@ -71,7 +71,9 @@ public enum DetectionStrategy {
 
         private Thread raceDetectionThread = new Thread(offload);
 
-        private ObjectOutputStream oOutput;
+        private MpscUnboundedArrayQueue<MemoryAccess> accesses = new MpscUnboundedArrayQueue<>(128);
+
+        private long accessNum = 0l;
 
         @Override
         public BalokShadowLocation createShadowLocation() {
@@ -80,45 +82,17 @@ public enum DetectionStrategy {
 
         @Override
         public MemoryTracker createMemoryTracker() {
-            return new AsyncMemoryTracker(queue, oOutput);
+            return new AsyncMemoryTracker(queue, accesses);
         }
 
         @Override
         public void init() {
-            if (RR.outputAccessOption.get()) {
-                DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyMMdd-HHmmss").withZone(ZoneId.of("GMT-5"));
-                // TODO: We need an option to decide the initialization of accessStream
-                try {
-//                    oOutput = new ObjectOutputStream(new FileOutputStream("access-" + formatter.format(Instant.now()) + ".log")) {
-//                        private boolean firstAccess = true;
-//
-//                        @Override
-//                        protected void writeStreamHeader() throws IOException {
-//                            if (firstAccess) {
-//                                firstAccess = false;
-//                                super.writeStreamHeader();
-//                                ;
-//                            }
-//                        }
-//                    };
-                    oOutput = new ObjectOutputStream(new FileOutputStream("access-" + formatter.format(Instant.now()) + ".log"));
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-            }
             offload.init();
             raceDetectionThread.start();
         }
 
         @Override
         public void fini() {
-            if (RR.outputAccessOption.get()) {
-                try {
-                    oOutput.close();
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-            }
             offload.end();
             try {
                 raceDetectionThread.join();
@@ -135,6 +109,8 @@ public enum DetectionStrategy {
 
             private final AtomicBoolean isEnd;
 
+            private ObjectOutputStream oOutput;
+
             public Offload() {
                 history = new ShadowMemory<>();
                 pool = null;
@@ -144,8 +120,17 @@ public enum DetectionStrategy {
 
             // Initialize the thread pool in init to make sure command line options have been parsed
             public void init() {
-                pool = Executors.newFixedThreadPool(RR.raceDetectThreadsOption.get());
-                Util.println("number of dedicated race detection threads: " + RR.raceDetectThreadsOption.get());
+                if (RR.outputAccessOption.get()) {
+                    DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyMMdd-HHmmss").withZone(ZoneId.of("GMT-5"));
+                    try {
+                        oOutput = new ObjectOutputStream(new FileOutputStream("access-" + formatter.format(Instant.now()) + ".log"));
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                } else {
+                    pool = Executors.newFixedThreadPool(RR.raceDetectThreadsOption.get());
+                    Util.println("number of dedicated race detection threads: " + RR.raceDetectThreadsOption.get());
+                }
             }
 
             public void end() {
@@ -154,15 +139,48 @@ public enum DetectionStrategy {
 
             @Override
             public void run() {
-                while (!isEnd.get()) {
+                if (RR.outputAccessOption.get()) {
+                    while (!isEnd.get()) {
+                        if (!accesses.isEmpty()) {
+                            accesses.drain((access) -> {
+                                try {
+                                    oOutput.writeObject(access);
+                                    accessNum++;
+                                } catch (IOException e) {
+                                    e.printStackTrace();
+                                }
+                            });
+                        }
+                    }
+                    // guarantee all memory accesses are serialized
+                    if (!accesses.isEmpty()) {
+                        accesses.drain((access) -> {
+                            try {
+                                oOutput.writeObject(access);
+                                accessNum++;
+                            } catch (IOException e) {
+                                e.printStackTrace();
+                            }
+                        });
+                    }
+
+                    System.out.println("The number of memory accesses: " + accessNum);
+                    try {
+                        oOutput.close();
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                } else {
+                    while (!isEnd.get()) {
+                        if (!queue.isEmpty()) {
+                            doRaceDetection();
+                        }
+                    }
+                    // guarantee all data is analyzed
                     if (!queue.isEmpty()) {
                         doRaceDetection();
+                        pool.shutdown();
                     }
-                }
-                // guarantee all data is analyzed
-                if (!queue.isEmpty()) {
-                    doRaceDetection();
-                    pool.shutdown();
                 }
             }
 

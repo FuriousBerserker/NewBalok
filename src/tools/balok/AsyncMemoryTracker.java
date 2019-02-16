@@ -25,11 +25,11 @@ public class AsyncMemoryTracker implements MemoryTracker {
 
     private final MpscUnboundedArrayQueue<Frame<Epoch>> queue;
 
-    private final ObjectOutputStream oOutput;
+    private final MpscUnboundedArrayQueue<MemoryAccess> accesses;
 
-    public AsyncMemoryTracker(MpscUnboundedArrayQueue<Frame<Epoch>> queue, ObjectOutputStream oOutput) {
+    public AsyncMemoryTracker(MpscUnboundedArrayQueue<Frame<Epoch>> queue, MpscUnboundedArrayQueue<MemoryAccess> accesses) {
         this.queue = queue;
-        this.oOutput = oOutput;
+        this.accesses = accesses;
     }
 
     @Override
@@ -61,13 +61,7 @@ public class AsyncMemoryTracker implements MemoryTracker {
         //System.out.println(key.loc.hashCode() + ", " + ticket + ", " + (mode == AccessMode.READ ? 0 : 1) + ", " + tracker.createTimestamp().toString() + ", " + info);
         if (RR.outputAccessOption.get()) {
             MemoryAccess ma = new MemoryAccess(mode, key.loc.hashCode(), threadID, ticket, vc, info.getFile(), info.getLine(), info.getOffset());
-            synchronized (oOutput) {
-                try {
-                    oOutput.writeObject(ma);
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-            }
+            accesses.add(ma);
         } else {
             if (!key.loc.tryAdd(mode, vc, ticket)) {
                 currentFrame.add(key.loc, mode, vc, ticket);
