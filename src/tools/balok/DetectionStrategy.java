@@ -88,6 +88,7 @@ public enum DetectionStrategy {
         @Override
         public void init() {
             offload.init();
+            raceDetectionThread.setPriority(Thread.MAX_PRIORITY);
             raceDetectionThread.start();
         }
 
@@ -115,7 +116,6 @@ public enum DetectionStrategy {
                 history = new ShadowMemory<>();
                 pool = null;
                 isEnd = new AtomicBoolean(false);
-
             }
 
             // Initialize the thread pool in init to make sure command line options have been parsed
