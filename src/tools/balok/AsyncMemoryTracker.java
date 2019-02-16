@@ -14,6 +14,7 @@ import java.io.ObjectOutputStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -25,9 +26,9 @@ public class AsyncMemoryTracker implements MemoryTracker {
 
     private final MpscUnboundedArrayQueue<Frame<Epoch>> queue;
 
-    private final MpscUnboundedArrayQueue<MemoryAccess> accesses;
+    private final ConcurrentLinkedQueue<MemoryAccess> accesses;
 
-    public AsyncMemoryTracker(MpscUnboundedArrayQueue<Frame<Epoch>> queue, MpscUnboundedArrayQueue<MemoryAccess> accesses) {
+    public AsyncMemoryTracker(MpscUnboundedArrayQueue<Frame<Epoch>> queue, ConcurrentLinkedQueue<MemoryAccess> accesses) {
         this.queue = queue;
         this.accesses = accesses;
     }

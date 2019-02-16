@@ -71,7 +71,7 @@ public enum DetectionStrategy {
 
         private Thread raceDetectionThread = new Thread(offload);
 
-        private MpscUnboundedArrayQueue<MemoryAccess> accesses = new MpscUnboundedArrayQueue<>(128);
+        private ConcurrentLinkedQueue<MemoryAccess> accesses = new ConcurrentLinkedQueue<>();
 
         private long accessNum = 0l;
 
@@ -141,27 +141,31 @@ public enum DetectionStrategy {
             public void run() {
                 if (RR.outputAccessOption.get()) {
                     while (!isEnd.get()) {
-                        if (!accesses.isEmpty()) {
-                            accesses.drain((access) -> {
+                        int currentSize = accesses.size();
+                        if (currentSize != 0) {
+                            for (int i = 0; i < currentSize; i++) {
+                                MemoryAccess access = accesses.poll();
                                 try {
                                     oOutput.writeObject(access);
-                                    accessNum++;
                                 } catch (IOException e) {
                                     e.printStackTrace();
                                 }
-                            });
+                            }
+                            accessNum += currentSize;
                         }
                     }
                     // guarantee all memory accesses are serialized
-                    if (!accesses.isEmpty()) {
-                        accesses.drain((access) -> {
+                    int currentSize = accesses.size();
+                    if (currentSize != 0) {
+                        for (int i = 0; i < currentSize; i++) {
+                            MemoryAccess access = accesses.poll();
                             try {
                                 oOutput.writeObject(access);
-                                accessNum++;
                             } catch (IOException e) {
                                 e.printStackTrace();
                             }
-                        });
+                        }
+                        accessNum += currentSize;
                     }
 
                     System.out.println("The number of memory accesses: " + accessNum);
