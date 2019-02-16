@@ -9,6 +9,8 @@ import org.jctools.queues.MpscUnboundedArrayQueue;
 import rr.meta.SourceLocation;
 import rr.tool.RR;
 
+import java.io.IOException;
+import java.io.ObjectOutputStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -23,11 +25,11 @@ public class AsyncMemoryTracker implements MemoryTracker {
 
     private final MpscUnboundedArrayQueue<Frame<Epoch>> queue;
 
-    private final ArrayList<MemoryAccess> accesses;
+    private final ObjectOutputStream oOutput;
 
-    public AsyncMemoryTracker(MpscUnboundedArrayQueue<Frame<Epoch>> queue, ArrayList<MemoryAccess> accesses) {
+    public AsyncMemoryTracker(MpscUnboundedArrayQueue<Frame<Epoch>> queue, ObjectOutputStream oOutput) {
         this.queue = queue;
-        this.accesses = accesses;
+        this.oOutput = oOutput;
     }
 
     @Override
@@ -59,8 +61,12 @@ public class AsyncMemoryTracker implements MemoryTracker {
         //System.out.println(key.loc.hashCode() + ", " + ticket + ", " + (mode == AccessMode.READ ? 0 : 1) + ", " + tracker.createTimestamp().toString() + ", " + info);
         if (RR.outputAccessOption.get()) {
             MemoryAccess ma = new MemoryAccess(mode, key.loc.hashCode(), threadID, ticket, vc, info.getFile(), info.getLine(), info.getOffset());
-            synchronized (accesses) {
-                accesses.add(ma);
+            synchronized (oOutput) {
+                try {
+                    oOutput.writeObject(ma);
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
             }
         } else {
             if (!key.loc.tryAdd(mode, vc, ticket)) {

@@ -71,7 +71,7 @@ public enum DetectionStrategy {
 
         private Thread raceDetectionThread = new Thread(offload);
 
-        private ArrayList<MemoryAccess> accesses = new ArrayList<>();
+        private ObjectOutputStream oOutput;
 
         @Override
         public BalokShadowLocation createShadowLocation() {
@@ -80,11 +80,32 @@ public enum DetectionStrategy {
 
         @Override
         public MemoryTracker createMemoryTracker() {
-            return new AsyncMemoryTracker(queue, accesses);
+            return new AsyncMemoryTracker(queue, oOutput);
         }
 
         @Override
         public void init() {
+            if (RR.outputAccessOption.get()) {
+                DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyMMdd-HHmmss").withZone(ZoneId.of("GMT-5"));
+                // TODO: We need an option to decide the initialization of accessStream
+                try {
+//                    oOutput = new ObjectOutputStream(new FileOutputStream("access-" + formatter.format(Instant.now()) + ".log")) {
+//                        private boolean firstAccess = true;
+//
+//                        @Override
+//                        protected void writeStreamHeader() throws IOException {
+//                            if (firstAccess) {
+//                                firstAccess = false;
+//                                super.writeStreamHeader();
+//                                ;
+//                            }
+//                        }
+//                    };
+                    oOutput = new ObjectOutputStream(new FileOutputStream("access-" + formatter.format(Instant.now()) + ".log"));
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
             offload.init();
             raceDetectionThread.start();
         }
@@ -92,16 +113,11 @@ public enum DetectionStrategy {
         @Override
         public void fini() {
             if (RR.outputAccessOption.get()) {
-                DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyMMdd-HHmmss").withZone(ZoneId.of("GMT-5"));
-                // TODO: We need an initializer to decide the initialization of accessStream
                 try {
-                    ObjectOutputStream accessStream = new ObjectOutputStream(new FileOutputStream("access-" + formatter.format(Instant.now()) + ".log"));
-                    accessStream.writeObject(accesses);
-                    accessStream.close();
+                    oOutput.close();
                 } catch (IOException e) {
                     e.printStackTrace();
                 }
-                System.out.println("Number of memory accesses: " + accesses.size());
             }
             offload.end();
             try {
