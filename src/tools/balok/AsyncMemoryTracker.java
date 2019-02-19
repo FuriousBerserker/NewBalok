@@ -17,6 +17,7 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 public class AsyncMemoryTracker implements MemoryTracker {
     private static final AtomicInteger codeGen = new AtomicInteger(Integer.MIN_VALUE);
@@ -26,11 +27,25 @@ public class AsyncMemoryTracker implements MemoryTracker {
 
     private final MpscUnboundedArrayQueue<Frame<Epoch>> queue;
 
-    private final ConcurrentLinkedQueue<MemoryAccess> accesses;
+    // private final ConcurrentLinkedQueue<MemoryAccess> accesses;
 
-    public AsyncMemoryTracker(MpscUnboundedArrayQueue<Frame<Epoch>> queue, ConcurrentLinkedQueue<MemoryAccess> accesses) {
+    private ObjectOutputStream oOutput;
+
+    private AtomicLong accessNum;
+
+    private static final int BUFFER_SIZE = 10000;
+
+    private MemoryAccess[] buffer;
+
+    private int nextPos = 0;
+
+    public AsyncMemoryTracker(MpscUnboundedArrayQueue<Frame<Epoch>> queue, ObjectOutputStream oOutput, AtomicLong accessNum) {
         this.queue = queue;
-        this.accesses = accesses;
+        this.oOutput = oOutput;
+        this.accessNum = accessNum;
+        if (RR.outputAccessOption.get()) {
+            buffer = new MemoryAccess[BUFFER_SIZE];
+        }
     }
 
     @Override
@@ -62,7 +77,21 @@ public class AsyncMemoryTracker implements MemoryTracker {
         //System.out.println(key.loc.hashCode() + ", " + ticket + ", " + (mode == AccessMode.READ ? 0 : 1) + ", " + tracker.createTimestamp().toString() + ", " + info);
         if (RR.outputAccessOption.get()) {
             MemoryAccess ma = new MemoryAccess(mode, key.loc.hashCode(), threadID, ticket, vc, info.getFile(), info.getLine(), info.getOffset());
-            accesses.add(ma);
+            buffer[nextPos] = ma;
+            nextPos++;
+            if (nextPos == BUFFER_SIZE) {
+                synchronized (oOutput) {
+                    for (MemoryAccess access : buffer) {
+                        try {
+                            oOutput.writeObject(access);
+                        } catch (IOException e) {
+                            e.printStackTrace();
+                        }
+                    }
+                }
+                nextPos = 0;
+                accessNum.addAndGet(BUFFER_SIZE);
+            }
         } else {
             if (!key.loc.tryAdd(mode, vc, ticket)) {
                 currentFrame.add(key.loc, mode, vc, ticket);
@@ -84,6 +113,21 @@ public class AsyncMemoryTracker implements MemoryTracker {
         if (frame != null) {
             queue.add(frame);
         }
+
+        if (RR.outputAccessOption.get() && nextPos != 0) {
+            synchronized (oOutput) {
+                for (int i = 0; i < nextPos; i++) {
+                    try {
+                        oOutput.writeObject(buffer[i]);
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                }
+            }
+            accessNum.addAndGet(nextPos);
+            nextPos = 0;
+        }
+
         active.set(false);
     }
 

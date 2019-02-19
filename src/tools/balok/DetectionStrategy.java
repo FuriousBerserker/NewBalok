@@ -17,6 +17,7 @@ import java.time.format.DateTimeFormatter;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.ObjectOutputStream;
+import java.util.concurrent.atomic.AtomicLong;
 
 public enum DetectionStrategy {
 
@@ -71,9 +72,20 @@ public enum DetectionStrategy {
 
         private Thread raceDetectionThread = new Thread(offload);
 
-        private ConcurrentLinkedQueue<MemoryAccess> accesses = new ConcurrentLinkedQueue<>();
+        // private ConcurrentLinkedQueue<MemoryAccess> accesses = new ConcurrentLinkedQueue<>();
 
-        private long accessNum = 0l;
+        private ObjectOutputStream oOutput;
+
+        private AtomicLong accessNum = new AtomicLong();
+
+        {
+            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyMMdd-HHmmss").withZone(ZoneId.of("GMT-5"));
+            try {
+                oOutput = new ObjectOutputStream(new FileOutputStream("access-" + formatter.format(Instant.now()) + ".log"));
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
 
         @Override
         public BalokShadowLocation createShadowLocation() {
@@ -82,7 +94,7 @@ public enum DetectionStrategy {
 
         @Override
         public MemoryTracker createMemoryTracker() {
-            return new AsyncMemoryTracker(queue, accesses);
+            return new AsyncMemoryTracker(queue, oOutput, accessNum);
         }
 
         @Override
@@ -98,6 +110,12 @@ public enum DetectionStrategy {
             try {
                 raceDetectionThread.join();
             } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+            System.out.println("The number of memory accesses: " + accessNum.get());
+            try {
+                oOutput.close();
+            } catch (IOException e) {
                 e.printStackTrace();
             }
         }
@@ -120,17 +138,8 @@ public enum DetectionStrategy {
 
             // Initialize the thread pool in init to make sure command line options have been parsed
             public void init() {
-                if (RR.outputAccessOption.get()) {
-                    DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyMMdd-HHmmss").withZone(ZoneId.of("GMT-5"));
-                    try {
-                        oOutput = new ObjectOutputStream(new FileOutputStream("access-" + formatter.format(Instant.now()) + ".log"));
-                    } catch (IOException e) {
-                        e.printStackTrace();
-                    }
-                } else {
-                    pool = Executors.newFixedThreadPool(RR.raceDetectThreadsOption.get());
-                    Util.println("number of dedicated race detection threads: " + RR.raceDetectThreadsOption.get());
-                }
+                pool = Executors.newFixedThreadPool(RR.raceDetectThreadsOption.get());
+                Util.println("number of dedicated race detection threads: " + RR.raceDetectThreadsOption.get());
             }
 
             public void end() {
@@ -139,52 +148,15 @@ public enum DetectionStrategy {
 
             @Override
             public void run() {
-                if (RR.outputAccessOption.get()) {
-                    while (!isEnd.get()) {
-                        int currentSize = accesses.size();
-                        if (currentSize != 0) {
-                            for (int i = 0; i < currentSize; i++) {
-                                MemoryAccess access = accesses.poll();
-                                try {
-                                    oOutput.writeObject(access);
-                                } catch (IOException e) {
-                                    e.printStackTrace();
-                                }
-                            }
-                            accessNum += currentSize;
-                        }
-                    }
-                    // guarantee all memory accesses are serialized
-                    int currentSize = accesses.size();
-                    if (currentSize != 0) {
-                        for (int i = 0; i < currentSize; i++) {
-                            MemoryAccess access = accesses.poll();
-                            try {
-                                oOutput.writeObject(access);
-                            } catch (IOException e) {
-                                e.printStackTrace();
-                            }
-                        }
-                        accessNum += currentSize;
-                    }
-
-                    System.out.println("The number of memory accesses: " + accessNum);
-                    try {
-                        oOutput.close();
-                    } catch (IOException e) {
-                        e.printStackTrace();
-                    }
-                } else {
-                    while (!isEnd.get()) {
-                        if (!queue.isEmpty()) {
-                            doRaceDetection();
-                        }
-                    }
-                    // guarantee all data is analyzed
+                while (!isEnd.get()) {
                     if (!queue.isEmpty()) {
                         doRaceDetection();
-                        pool.shutdown();
                     }
+                }
+                // guarantee all data is analyzed
+                if (!queue.isEmpty()) {
+                    doRaceDetection();
+                    pool.shutdown();
                 }
             }
 
