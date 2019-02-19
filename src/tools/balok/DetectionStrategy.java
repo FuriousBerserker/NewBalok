@@ -4,9 +4,12 @@ import acme.util.Util;
 import balok.causality.Epoch;
 import balok.causality.async.Frame;
 import balok.causality.async.ShadowMemory;
+import com.esotericsoftware.kryo.Kryo;
+import com.esotericsoftware.kryo.io.Output;
 import org.jctools.queues.MpscUnboundedArrayQueue;
 import rr.tool.RR;
 
+import java.io.FileNotFoundException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.*;
@@ -18,6 +21,8 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.ObjectOutputStream;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.zip.DeflaterOutputStream;
+import java.util.zip.GZIPOutputStream;
 
 public enum DetectionStrategy {
 
@@ -74,14 +79,20 @@ public enum DetectionStrategy {
 
         // private ConcurrentLinkedQueue<MemoryAccess> accesses = new ConcurrentLinkedQueue<>();
 
-        private ObjectOutputStream oOutput;
+        private Output oOutput;
 
         private AtomicLong accessNum = new AtomicLong();
 
+        private Kryo kryo = new Kryo();
+
         {
+            kryo.setReferences(false);
+            kryo.register(MemoryAccess.class, new MemoryAccessSerializer());
             DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyMMdd-HHmmss").withZone(ZoneId.of("GMT-5"));
             try {
-                oOutput = new ObjectOutputStream(new FileOutputStream("access-" + formatter.format(Instant.now()) + ".log"));
+                oOutput = new Output(new GZIPOutputStream(new FileOutputStream("access-" + formatter.format(Instant.now()) + ".log")));
+            } catch (FileNotFoundException e) {
+                e.printStackTrace();
             } catch (IOException e) {
                 e.printStackTrace();
             }
@@ -94,7 +105,7 @@ public enum DetectionStrategy {
 
         @Override
         public MemoryTracker createMemoryTracker() {
-            return new AsyncMemoryTracker(queue, oOutput, accessNum);
+            return new AsyncMemoryTracker(queue, kryo, oOutput, accessNum);
         }
 
         @Override
@@ -113,11 +124,7 @@ public enum DetectionStrategy {
                 e.printStackTrace();
             }
             System.out.println("The number of memory accesses: " + accessNum.get());
-            try {
-                oOutput.close();
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
+            oOutput.close();
         }
 
         class Offload implements Runnable {
@@ -127,8 +134,6 @@ public enum DetectionStrategy {
             private ExecutorService pool;
 
             private final AtomicBoolean isEnd;
-
-            private ObjectOutputStream oOutput;
 
             public Offload() {
                 history = new ShadowMemory<>();

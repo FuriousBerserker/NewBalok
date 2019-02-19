@@ -37,6 +37,10 @@ public class MemoryAccess implements Serializable {
 
     private int offset;
 
+    public MemoryAccess() {
+
+    }
+
     public MemoryAccess(AccessMode mode, int address, int tid, int ticket, TaskView vc, String file, int line, int offset) {
         this.mode = mode;
         this.address = address;

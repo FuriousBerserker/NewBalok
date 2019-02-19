@@ -55,7 +55,11 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 	<property name="cup.jar" value="${rr.basedir}/jars/java-cup-11a.jar" />
 	<property name="jflex.jar" value="${rr.basedir}/jars/JFlex.jar" />
 	<property name="balok.jar" value="${rr.basedir}/jars/balok-1.0-dev-all-deps.jar" />
-        <property name="jctools.jar" value="${rr.basedir}/jars/jctools-core.jar" />
+	<property name="jctools.jar" value="${rr.basedir}/jars/jctools-core.jar" />
+	<property name="kryo.jar" value="${rr.basedir}/jars/kryo-2.24.0.jar" />
+	<property name="objenesis.jar" value="${rr.basedir}/jars/objenesis-2.1.jar" />
+	<property name="minlog.jar" value="${rr.basedir}/jars/minlog-1.2.jar" />
+
 	<property name="rr.vmargs" value="-javaagent:${jar.dir}/rragent.jar $$JVM_ARGS" />
 
 	<property name="rr.main" value="rr.RRMain" />
@@ -65,7 +69,10 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 		<pathelement location="${classes.dir}" />
 		<pathelement location="${cup.jar}" />
 		<pathelement location="${balok.jar}" />
-                <pathelement location="${jctools.jar}" />
+		<pathelement location="${jctools.jar}" />
+		<pathelement location="${kryo.jar}" />
+		<pathelement location="${objenesis.jar}" />
+		<pathelement location="${minlog.jar}" />
 	</path>
 
 	<path id="rr.classpath.jar">
@@ -162,7 +169,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 			</manifest>
 		</jar>
 		<echo file="${bin.dir}/${run-script}" append="false" message="#!/bin/bash${line.separator}
-								  RR_TOOLPATH='${cup.jar}:${jflex.jar}:${balok.jar}:${jctools.jar}' ${line.separator}
+								  RR_TOOLPATH='${cup.jar}:${jflex.jar}:${balok.jar}:${jctools.jar}:${kryo.jar}:${objenesis.jar}:${minlog.jar}' ${line.separator}
 								  ${java.home}/bin/java -version ${line.separator}
 								  ${java.home}/bin/java -Xms4096m -Xmx8192m ${rr.vmargs} -Xbootclasspath/p:${toString:rr.classpath.jar}:$$RR_TOOLPATH ${rr.main} $$*" />
 		<chmod file="${bin.dir}/${run-script}" perm="u+x" />

@@ -5,6 +5,8 @@ import balok.causality.async.Frame;
 import balok.causality.async.FrameBuilder;
 import balok.causality.async.ShadowMemory;
 import balok.causality.async.ShadowMemoryBuilder;
+import com.esotericsoftware.kryo.Kryo;
+import com.esotericsoftware.kryo.io.Output;
 import org.jctools.queues.MpscUnboundedArrayQueue;
 import rr.meta.SourceLocation;
 import rr.tool.RR;
@@ -29,7 +31,9 @@ public class AsyncMemoryTracker implements MemoryTracker {
 
     // private final ConcurrentLinkedQueue<MemoryAccess> accesses;
 
-    private ObjectOutputStream oOutput;
+    private Kryo kryo;
+
+    private Output oOutput;
 
     private AtomicLong accessNum;
 
@@ -39,8 +43,9 @@ public class AsyncMemoryTracker implements MemoryTracker {
 
     private int nextPos = 0;
 
-    public AsyncMemoryTracker(MpscUnboundedArrayQueue<Frame<Epoch>> queue, ObjectOutputStream oOutput, AtomicLong accessNum) {
+    public AsyncMemoryTracker(MpscUnboundedArrayQueue<Frame<Epoch>> queue, Kryo kryo, Output oOutput, AtomicLong accessNum) {
         this.queue = queue;
+        this.kryo = kryo;
         this.oOutput = oOutput;
         this.accessNum = accessNum;
         if (RR.outputAccessOption.get()) {
@@ -82,11 +87,7 @@ public class AsyncMemoryTracker implements MemoryTracker {
             if (nextPos == BUFFER_SIZE) {
                 synchronized (oOutput) {
                     for (MemoryAccess access : buffer) {
-                        try {
-                            oOutput.writeObject(access);
-                        } catch (IOException e) {
-                            e.printStackTrace();
-                        }
+                        kryo.writeObject(oOutput, access);
                     }
                 }
                 nextPos = 0;
@@ -117,11 +118,7 @@ public class AsyncMemoryTracker implements MemoryTracker {
         if (RR.outputAccessOption.get() && nextPos != 0) {
             synchronized (oOutput) {
                 for (int i = 0; i < nextPos; i++) {
-                    try {
-                        oOutput.writeObject(buffer[i]);
-                    } catch (IOException e) {
-                        e.printStackTrace();
-                    }
+                    kryo.writeObject(oOutput, buffer[i]);
                 }
             }
             accessNum.addAndGet(nextPos);
