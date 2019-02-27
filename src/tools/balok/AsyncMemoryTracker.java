@@ -5,6 +5,7 @@ import balok.causality.async.Frame;
 import balok.causality.async.FrameBuilder;
 import balok.causality.async.ShadowMemory;
 import balok.causality.async.ShadowMemoryBuilder;
+import balok.ser.SerializedFrame;
 import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.io.Output;
 import org.jctools.queues.MpscUnboundedArrayQueue;
@@ -37,20 +38,20 @@ public class AsyncMemoryTracker implements MemoryTracker {
 
     private AtomicLong accessNum;
 
-    private static final int BUFFER_SIZE = 10000;
-
-    private MemoryAccess[] buffer;
-
-    private int nextPos = 0;
+//    private static final int BUFFER_SIZE = 100;
+//
+//    private Frame[] buffer;
+//
+//    private int nextPos = 0;
 
     public AsyncMemoryTracker(MpscUnboundedArrayQueue<Frame<Epoch>> queue, Kryo kryo, Output oOutput, AtomicLong accessNum) {
         this.queue = queue;
         this.kryo = kryo;
         this.oOutput = oOutput;
         this.accessNum = accessNum;
-        if (RR.outputAccessOption.get()) {
-            buffer = new MemoryAccess[BUFFER_SIZE];
-        }
+//        if (RR.outputAccessOption.get()) {
+//            buffer = new Frame[BUFFER_SIZE];
+//        }
     }
 
     @Override
@@ -81,17 +82,13 @@ public class AsyncMemoryTracker implements MemoryTracker {
         int ticket = key.loc.createTicket();
         //System.out.println(key.loc.hashCode() + ", " + ticket + ", " + (mode == AccessMode.READ ? 0 : 1) + ", " + tracker.createTimestamp().toString() + ", " + info);
         if (RR.outputAccessOption.get()) {
-            MemoryAccess ma = new MemoryAccess(mode, key.loc.hashCode(), threadID, ticket, vc, info.getFile(), info.getLine(), info.getOffset());
-            buffer[nextPos] = ma;
-            nextPos++;
-            if (nextPos == BUFFER_SIZE) {
+            currentFrame.add(key.loc, mode, vc, ticket);
+            if (currentFrame.isFull()) {
+                SerializedFrame<Epoch> frame = currentFrame.buildForSerialization();
                 synchronized (oOutput) {
-                    for (MemoryAccess access : buffer) {
-                        kryo.writeObject(oOutput, access);
-                    }
+                    kryo.writeObject(oOutput, frame);
                 }
-                nextPos = 0;
-                accessNum.addAndGet(BUFFER_SIZE);
+                accessNum.addAndGet(frame.size());
             }
         } else {
             if (!key.loc.tryAdd(mode, vc, ticket)) {
@@ -110,21 +107,20 @@ public class AsyncMemoryTracker implements MemoryTracker {
 
     @Override
     public void onEnd(TaskTracker tracker) {
-        Frame frame = currentFrame.isEmpty() ? null : currentFrame.build();
-        if (frame != null) {
-            queue.add(frame);
-        }
-
-        if (RR.outputAccessOption.get() && nextPos != 0) {
-            synchronized (oOutput) {
-                for (int i = 0; i < nextPos; i++) {
-                    kryo.writeObject(oOutput, buffer[i]);
+        if (RR.outputAccessOption.get()) {
+            if (!currentFrame.isEmpty()) {
+                SerializedFrame<Epoch> frame = currentFrame.buildForSerialization();
+                synchronized (oOutput) {
+                    kryo.writeObject(oOutput, frame);
                 }
+                accessNum.addAndGet(frame.size());
             }
-            accessNum.addAndGet(nextPos);
-            nextPos = 0;
+        } else {
+            Frame frame = currentFrame.isEmpty() ? null : currentFrame.build();
+            if (frame != null) {
+                queue.add(frame);
+            }
         }
-
         active.set(false);
     }
 

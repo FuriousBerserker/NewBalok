@@ -4,6 +4,7 @@ import acme.util.Util;
 import balok.causality.Epoch;
 import balok.causality.async.Frame;
 import balok.causality.async.ShadowMemory;
+import balok.ser.SerializedFrame;
 import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.io.Output;
 import org.jctools.queues.MpscUnboundedArrayQueue;
@@ -87,7 +88,8 @@ public enum DetectionStrategy {
 
         {
             kryo.setReferences(false);
-            kryo.register(MemoryAccess.class, new MemoryAccessSerializer());
+            kryo.setRegistrationRequired(true);
+            kryo.register(SerializedFrame.class, new FrameSerializer());
             DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyMMdd-HHmmss").withZone(ZoneId.of("GMT-5"));
             try {
                 oOutput = new Output(new GZIPOutputStream(new FileOutputStream("access-" + formatter.format(Instant.now()) + ".log")));
