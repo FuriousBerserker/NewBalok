@@ -84,21 +84,7 @@ public enum DetectionStrategy {
 
         private AtomicLong accessNum = new AtomicLong();
 
-        private Kryo kryo = new Kryo();
-
-        {
-            kryo.setReferences(false);
-            kryo.setRegistrationRequired(true);
-            kryo.register(SerializedFrame.class, new FrameSerializer());
-            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyMMdd-HHmmss").withZone(ZoneId.of("GMT-5"));
-            try {
-                oOutput = new Output(new GZIPOutputStream(new FileOutputStream("access-" + formatter.format(Instant.now()) + ".log")));
-            } catch (FileNotFoundException e) {
-                e.printStackTrace();
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        }
+        private Kryo kryo;
 
         @Override
         public BalokShadowLocation createShadowLocation() {
@@ -112,6 +98,20 @@ public enum DetectionStrategy {
 
         @Override
         public void init() {
+            if (RR.outputAccessOption.get()) {
+                kryo = new Kryo();
+                kryo.setReferences(false);
+                kryo.setRegistrationRequired(true);
+                kryo.register(SerializedFrame.class, new FrameSerializer());
+                DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyMMdd-HHmmss").withZone(ZoneId.of("GMT-5"));
+                try {
+                    oOutput = new Output(new GZIPOutputStream(new FileOutputStream("access-" + formatter.format(Instant.now()) + ".log")));
+                } catch (FileNotFoundException e) {
+                    e.printStackTrace();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
             offload.init();
             raceDetectionThread.setPriority(Thread.MAX_PRIORITY);
             raceDetectionThread.start();
@@ -125,8 +125,10 @@ public enum DetectionStrategy {
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
-            System.out.println("The number of memory accesses: " + accessNum.get());
-            oOutput.close();
+            if (RR.outputAccessOption.get()) {
+                System.out.println("The number of memory accesses: " + accessNum.get());
+                oOutput.close();
+            }
         }
 
         class Offload implements Runnable {
