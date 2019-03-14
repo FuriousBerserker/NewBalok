@@ -103,9 +103,16 @@ public enum DetectionStrategy {
                 kryo.setReferences(false);
                 kryo.setRegistrationRequired(true);
                 kryo.register(SerializedFrame.class, new FrameSerializer());
-                DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyMMdd-HHmmss").withZone(ZoneId.of("GMT-5"));
+                String fileName = null;
+                if (RR.accessFileOption.get() != null) {
+                    fileName = RR.accessFileOption.get();
+                } else {
+                    DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyMMdd-HHmmss").withZone(ZoneId.of("GMT-5"));
+                    fileName = "access-" + formatter.format(Instant.now()) + ".log";
+                }
+
                 try {
-                    oOutput = new Output(new GZIPOutputStream(new FileOutputStream("access-" + formatter.format(Instant.now()) + ".log")));
+                    oOutput = new Output(new GZIPOutputStream(new FileOutputStream(fileName)));
                 } catch (FileNotFoundException e) {
                     e.printStackTrace();
                 } catch (IOException e) {

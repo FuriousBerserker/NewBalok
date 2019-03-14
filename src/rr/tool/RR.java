@@ -175,6 +175,9 @@ public class RR {
     public static final CommandLineOption<Boolean> outputAccessOption =
 			CommandLine.makeBoolean("outputAccess", false, CommandLineOption.Kind.STABLE, "Output memory accesses into a log file");
 
+    public static final CommandLineOption<String> accessFileOption =
+			CommandLine.makeString("accessFile", null, CommandLineOption.Kind.STABLE, "File name that store memory accesses");
+
 	public static final StringMatcher toolCode = new StringMatcher(StringMatchResult.REJECT, "+acme..*", "+rr..*", "+java..*");
 
 	private static volatile boolean shuttingDown = false;

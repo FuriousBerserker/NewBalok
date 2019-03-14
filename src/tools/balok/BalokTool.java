@@ -9,10 +9,12 @@ import acme.util.option.CommandLine;
 
 import balok.causality.*;
 
+import rr.RRMain;
 import rr.annotations.Abbrev;
 import rr.barrier.BarrierEvent;
 import rr.barrier.BarrierListener;
 import rr.barrier.BarrierMonitor;
+import rr.event.*;
 import rr.state.ShadowLock;
 import rr.state.ShadowThread;
 import rr.state.ShadowVar;
@@ -21,14 +23,7 @@ import rr.tool.RR;
 import rr.tool.Tool;
 import rr.error.ErrorMessage;
 import rr.error.ErrorMessages;
-import rr.event.VolatileAccessEvent;
 import rr.event.AccessEvent.Kind;
-import rr.event.NewThreadEvent;
-import rr.event.JoinEvent;
-import rr.event.AcquireEvent;
-import rr.event.ReleaseEvent;
-import rr.event.WaitEvent;
-import rr.event.AccessEvent;
 import rr.meta.ArrayAccessInfo;
 import rr.meta.FieldInfo;
 
@@ -112,6 +107,11 @@ public class BalokTool extends Tool implements BarrierListener<BalokBarrierState
     }
 
     @Override
+    public void preStart(StartEvent se) {
+        phaser.register();
+    }
+
+    @Override
     public void init() {
         Util.println("Balok start");
         Util.println("Offload race detection mode: " + RR.offloadOption.get());
@@ -123,6 +123,9 @@ public class BalokTool extends Tool implements BarrierListener<BalokBarrierState
     @Override
     public void fini() {
         phaser.arriveAndAwaitAdvance();
+//        while (RRMain.numRunningThreads() != 0) {
+//
+//        }
         memFactory.fini();
         Util.println("Balok end");
         super.fini();
@@ -151,7 +154,6 @@ public class BalokTool extends Tool implements BarrierListener<BalokBarrierState
         childMem = memFactory.createMemoryTracker();
         ts_set_taskTracker(currentST, childTask);
         ts_set_memTracker(currentST, childMem);
-        phaser.register();
         // Keep this hook for SyncMemoryChecker
         childMem.onSyncEvent(childTask);
         super.create(ne);
