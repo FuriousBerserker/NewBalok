@@ -10,7 +10,8 @@ import com.esotericsoftware.kryo.io.Output;
 import org.jctools.queues.MpscUnboundedArrayQueue;
 import rr.tool.RR;
 
-import java.io.FileNotFoundException;
+import java.io.*;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.*;
@@ -18,9 +19,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.ObjectOutputStream;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.zip.DeflaterOutputStream;
 import java.util.zip.GZIPOutputStream;
@@ -34,7 +32,7 @@ public enum DetectionStrategy {
         }
 
         @Override
-        public MemoryTracker createMemoryTracker() {
+        public MemoryTracker createMemoryTracker(final int tid) {
             return new NoCheckMemoryTracker();
         }
 
@@ -56,7 +54,7 @@ public enum DetectionStrategy {
         }
 
         @Override
-        public MemoryTracker createMemoryTracker() {
+        public MemoryTracker createMemoryTracker(final int tid) {
             return new SyncMemoryTracker();
         }
 
@@ -80,11 +78,11 @@ public enum DetectionStrategy {
 
         // private ConcurrentLinkedQueue<MemoryAccess> accesses = new ConcurrentLinkedQueue<>();
 
-        private Output oOutput;
-
         private AtomicLong accessNum = new AtomicLong();
 
         private Kryo kryo;
+
+        private File folder;
 
         @Override
         public BalokShadowLocation createShadowLocation() {
@@ -92,8 +90,8 @@ public enum DetectionStrategy {
         }
 
         @Override
-        public MemoryTracker createMemoryTracker() {
-            return new AsyncMemoryTracker(queue, kryo, oOutput, accessNum);
+        public MemoryTracker createMemoryTracker(final int tid) {
+            return new AsyncMemoryTracker(queue, kryo, folder, accessNum, tid);
         }
 
         @Override
@@ -103,20 +101,17 @@ public enum DetectionStrategy {
                 kryo.setReferences(false);
                 kryo.setRegistrationRequired(true);
                 kryo.register(SerializedFrame.class, new FrameSerializer());
-                String fileName = null;
-                if (RR.accessFileOption.get() != null) {
-                    fileName = RR.accessFileOption.get();
+                String folderName = null;
+                if (RR.folderOption.get() != null) {
+                    folderName = RR.folderOption.get();
                 } else {
                     DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyMMdd-HHmmss").withZone(ZoneId.of("GMT-5"));
-                    fileName = "access-" + formatter.format(Instant.now()) + ".log";
+                    folderName = "access-" + formatter.format(Instant.now()) + ".log";
                 }
-
-                try {
-                    oOutput = new Output(new GZIPOutputStream(new FileOutputStream(fileName)));
-                } catch (FileNotFoundException e) {
-                    e.printStackTrace();
-                } catch (IOException e) {
-                    e.printStackTrace();
+                folder = new File(folderName);
+                if (!prepareFolder(folder)) {
+                    System.out.println("Unable to create / clear folder \"" + folder.getAbsolutePath() + "\"");
+                    System.exit(1);
                 }
             }
             offload.init();
@@ -134,7 +129,21 @@ public enum DetectionStrategy {
             }
             if (RR.outputAccessOption.get()) {
                 System.out.println("The number of memory accesses: " + accessNum.get());
-                oOutput.close();
+            }
+        }
+
+        private boolean prepareFolder(File f) {
+            if (f.exists()) {
+                if (!f.isDirectory() || !f.canWrite()) {
+                    return false;
+                } else {
+                    for (File file : f.listFiles()) {
+                        file.delete();
+                    }
+                    return true;
+                }
+            } else {
+                return f.mkdir();
             }
         }
 
@@ -206,7 +215,7 @@ public enum DetectionStrategy {
     };
     public abstract BalokShadowLocation createShadowLocation();
 
-    public abstract MemoryTracker createMemoryTracker();
+    public abstract MemoryTracker createMemoryTracker(final int tid);
 
     public abstract void init();
 

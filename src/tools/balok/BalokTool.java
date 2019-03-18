@@ -151,7 +151,7 @@ public class BalokTool extends Tool implements BarrierListener<BalokBarrierState
             // the timestamp starts from 1, so here we don't need to increase it again
             //childTask.produceEvent();
         }
-        childMem = memFactory.createMemoryTracker();
+        childMem = memFactory.createMemoryTracker(currentST.getTid());
         ts_set_taskTracker(currentST, childTask);
         ts_set_memTracker(currentST, childMem);
         // Keep this hook for SyncMemoryChecker

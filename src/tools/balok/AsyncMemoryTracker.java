@@ -12,8 +12,7 @@ import org.jctools.queues.MpscUnboundedArrayQueue;
 import rr.meta.SourceLocation;
 import rr.tool.RR;
 
-import java.io.IOException;
-import java.io.ObjectOutputStream;
+import java.io.*;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -21,6 +20,7 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.zip.GZIPOutputStream;
 
 public class AsyncMemoryTracker implements MemoryTracker {
     private static final AtomicInteger codeGen = new AtomicInteger(Integer.MIN_VALUE);
@@ -34,6 +34,8 @@ public class AsyncMemoryTracker implements MemoryTracker {
 
     private Kryo kryo;
 
+    private File folderForLogs;
+
     private Output oOutput;
 
     private AtomicLong accessNum;
@@ -44,11 +46,21 @@ public class AsyncMemoryTracker implements MemoryTracker {
 //
 //    private int nextPos = 0;
 
-    public AsyncMemoryTracker(MpscUnboundedArrayQueue<Frame<Epoch>> queue, Kryo kryo, Output oOutput, AtomicLong accessNum) {
+    public AsyncMemoryTracker(MpscUnboundedArrayQueue<Frame<Epoch>> queue, Kryo kryo, File folderForLogs, AtomicLong accessNum, final int tid) {
         this.queue = queue;
         this.kryo = kryo;
-        this.oOutput = oOutput;
+        this.folderForLogs = folderForLogs;
         this.accessNum = accessNum;
+        if (RR.outputAccessOption.get()) {
+            try {
+                File threadLocalLog = new File(folderForLogs, tid + ".log");
+                oOutput = new Output(new GZIPOutputStream(new FileOutputStream(threadLocalLog)));
+            } catch (FileNotFoundException e) {
+                e.printStackTrace();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
 //        if (RR.outputAccessOption.get()) {
 //            buffer = new Frame[BUFFER_SIZE];
 //        }
@@ -85,9 +97,7 @@ public class AsyncMemoryTracker implements MemoryTracker {
             currentFrame.add(key.loc, mode, vc, ticket);
             if (currentFrame.isFull()) {
                 SerializedFrame<Epoch> frame = currentFrame.buildForSerialization();
-                synchronized (oOutput) {
-                    kryo.writeObject(oOutput, frame);
-                }
+                kryo.writeObject(oOutput, frame);
                 accessNum.addAndGet(frame.size());
             }
         } else {
@@ -115,6 +125,7 @@ public class AsyncMemoryTracker implements MemoryTracker {
                 }
                 accessNum.addAndGet(frame.size());
             }
+            oOutput.close();
         } else {
             Frame frame = currentFrame.isEmpty() ? null : currentFrame.build();
             if (frame != null) {
