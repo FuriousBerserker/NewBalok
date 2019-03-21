@@ -163,6 +163,7 @@ public class BalokTool extends Tool implements BarrierListener<BalokBarrierState
     public void stop(ShadowThread td) {
         final TaskTracker task = ts_get_taskTracker(td);
         final MemoryTracker mem = ts_get_memTracker(td);
+        //System.out.println("[debug] thread " + td.getTid() + " is end");
         mem.onEnd(task);
         if (RR.unitTestOption.get()) {
            Util.printf(task.toString()); 
