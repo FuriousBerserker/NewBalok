@@ -9,6 +9,7 @@ import acme.util.option.CommandLine;
 
 import balok.causality.*;
 
+import balok.causality.async.ShadowEntry;
 import rr.RRMain;
 import rr.annotations.Abbrev;
 import rr.barrier.BarrierEvent;
@@ -27,6 +28,7 @@ import rr.event.AccessEvent.Kind;
 import rr.meta.ArrayAccessInfo;
 import rr.meta.FieldInfo;
 
+import java.util.HashSet;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.Phaser;
 // finished: getResource, ShodowMemoryBuilder, tick
@@ -40,7 +42,9 @@ public class BalokTool extends Tool implements BarrierListener<BalokBarrierState
 
     private DetectionStrategy memFactory = null;
 
-    private Phaser phaser = new Phaser(1);
+    private HashSet<Integer> tids = new HashSet<>();
+
+    //private Phaser phaser = new Phaser(1);
 
     private final PtpCausalityFactory vcFactory = PtpCausalityFactory.VECTOR_MUT;
 
@@ -108,7 +112,7 @@ public class BalokTool extends Tool implements BarrierListener<BalokBarrierState
 
     @Override
     public void preStart(StartEvent se) {
-        phaser.register();
+        //phaser.register();
     }
 
     @Override
@@ -122,11 +126,18 @@ public class BalokTool extends Tool implements BarrierListener<BalokBarrierState
 
     @Override
     public void fini() {
-        phaser.arriveAndAwaitAdvance();
+        //phaser.arriveAndAwaitAdvance();
 //        while (RRMain.numRunningThreads() != 0) {
 //
 //        }
         memFactory.fini();
+        for (int tid : tids) {
+            System.out.println("stop TaskTracker and MemoryTracker for thread " + tid + " before exit");
+            ShadowThread st = ShadowThread.get(tid);
+            TaskTracker task = ts_get_taskTracker(st);
+            MemoryTracker mem = ts_get_memTracker(st);
+            mem.onEnd(task);
+        }
         Util.println("Balok end");
         super.fini();
     }
@@ -156,6 +167,7 @@ public class BalokTool extends Tool implements BarrierListener<BalokBarrierState
         ts_set_memTracker(currentST, childMem);
         // Keep this hook for SyncMemoryChecker
         childMem.onSyncEvent(childTask);
+        tids.add(currentST.getTid());
         super.create(ne);
     }
 
@@ -168,8 +180,9 @@ public class BalokTool extends Tool implements BarrierListener<BalokBarrierState
         if (RR.unitTestOption.get()) {
            Util.printf(task.toString()); 
         }
-        phaser.arriveAndDeregister();
+        //phaser.arriveAndDeregister();
         //TODO: shall we set task and mem to null to help garbage collection?
+        tids.remove(td.getTid());
         super.stop(td);
     }
 
