@@ -11,6 +11,7 @@ import balok.causality.PtpCausalityFactory;
 import balok.causality.TaskTracker;
 import balok.ser.SerializedFrame;
 import com.esotericsoftware.kryo.Kryo;
+import javafx.concurrent.Task;
 import rr.annotations.Abbrev;
 import rr.barrier.BarrierEvent;
 import rr.barrier.BarrierListener;
@@ -278,11 +279,21 @@ public class BalokFrontEndTool extends Tool implements BarrierListener<BalokBarr
     }
 
     public static boolean readFastPath(final ShadowVar shadow, final ShadowThread st) {
-        return false;
+        if (shadow instanceof BalokShadowLocation) {
+            TaskTracker task = ts_get_taskTracker(st);
+            MemoryTracker mem = ts_get_memTracker(st);
+            mem.onAccess(task, (BalokShadowLocation)shadow, AccessMode.READ, null, st.getTid());
+        }
+        return true;
     }
 
     public static boolean writeFastPath(final ShadowVar shadow, final ShadowThread st) {
-        return false;
+        if (shadow instanceof BalokShadowLocation) {
+            TaskTracker task = ts_get_taskTracker(st);
+            MemoryTracker mem = ts_get_memTracker(st);
+            mem.onAccess(task, (BalokShadowLocation)shadow, AccessMode.WRITE, null, st.getTid());
+        }
+        return true;
     }
 
     @Override
