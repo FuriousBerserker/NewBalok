@@ -30,40 +30,9 @@ public class AsyncMemoryTracker implements MemoryTracker {
 
     private final MpscUnboundedArrayQueue<Frame<Epoch>> queue;
 
-    // private final ConcurrentLinkedQueue<MemoryAccess> accesses;
 
-    private Kryo kryo;
-
-    private File folderForLogs;
-
-    private Output oOutput;
-
-    private AtomicLong accessNum;
-
-//    private static final int BUFFER_SIZE = 100;
-//
-//    private Frame[] buffer;
-//
-//    private int nextPos = 0;
-
-    public AsyncMemoryTracker(MpscUnboundedArrayQueue<Frame<Epoch>> queue, Kryo kryo, File folderForLogs, AtomicLong accessNum, final int tid) {
+    public AsyncMemoryTracker(MpscUnboundedArrayQueue<Frame<Epoch>> queue) {
         this.queue = queue;
-        this.kryo = kryo;
-        this.folderForLogs = folderForLogs;
-        this.accessNum = accessNum;
-        if (RR.outputAccessOption.get()) {
-            try {
-                File threadLocalLog = new File(folderForLogs, tid + ".log");
-                oOutput = new Output(new GZIPOutputStream(new FileOutputStream(threadLocalLog)));
-            } catch (FileNotFoundException e) {
-                e.printStackTrace();
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        }
-//        if (RR.outputAccessOption.get()) {
-//            buffer = new Frame[BUFFER_SIZE];
-//        }
     }
 
     @Override
@@ -93,19 +62,11 @@ public class AsyncMemoryTracker implements MemoryTracker {
 //        }
         int ticket = key.loc.createTicket();
         //System.out.println(key.loc.hashCode() + ", " + ticket + ", " + (mode == AccessMode.READ ? 0 : 1) + ", " + tracker.createTimestamp().toString() + ", " + info);
-        if (RR.outputAccessOption.get()) {
+
+        if (!key.loc.tryAdd(mode, vc, ticket)) {
             currentFrame.add(key.loc, mode, vc, ticket);
             if (currentFrame.isFull()) {
-                SerializedFrame<Epoch> frame = currentFrame.buildForSerialization();
-                kryo.writeObject(oOutput, frame);
-                accessNum.addAndGet(frame.size());
-            }
-        } else {
-            if (!key.loc.tryAdd(mode, vc, ticket)) {
-                currentFrame.add(key.loc, mode, vc, ticket);
-                if (currentFrame.isFull()) {
-                    queue.add(currentFrame.build());
-                }
+                queue.add(currentFrame.build());
             }
         }
     }
@@ -117,20 +78,9 @@ public class AsyncMemoryTracker implements MemoryTracker {
 
     @Override
     public void onEnd(TaskTracker tracker) {
-        if (RR.outputAccessOption.get()) {
-            if (!currentFrame.isEmpty()) {
-                SerializedFrame<Epoch> frame = currentFrame.buildForSerialization();
-                synchronized (oOutput) {
-                    kryo.writeObject(oOutput, frame);
-                }
-                accessNum.addAndGet(frame.size());
-            }
-            oOutput.close();
-        } else {
-            Frame frame = currentFrame.isEmpty() ? null : currentFrame.build();
-            if (frame != null) {
-                queue.add(frame);
-            }
+        Frame frame = currentFrame.isEmpty() ? null : currentFrame.build();
+        if (frame != null) {
+            queue.add(frame);
         }
         active.set(false);
     }

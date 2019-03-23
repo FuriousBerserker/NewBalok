@@ -299,7 +299,6 @@ public class RRMain {
 		cl.add(rr.tool.RR.raceDetectThreadsOption);
 		cl.add(rr.tool.RR.unitTestOption);
 		cl.add(rr.tool.RR.offloadOption);
-		cl.add(rr.tool.RR.outputAccessOption);
 		cl.add(rr.tool.RR.folderOption);
 
 		int n = cl.apply(argv);

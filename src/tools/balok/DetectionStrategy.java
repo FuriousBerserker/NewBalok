@@ -32,7 +32,7 @@ public enum DetectionStrategy {
         }
 
         @Override
-        public MemoryTracker createMemoryTracker(final int tid) {
+        public MemoryTracker createMemoryTracker() {
             return new NoCheckMemoryTracker();
         }
 
@@ -54,7 +54,7 @@ public enum DetectionStrategy {
         }
 
         @Override
-        public MemoryTracker createMemoryTracker(final int tid) {
+        public MemoryTracker createMemoryTracker() {
             return new SyncMemoryTracker();
         }
 
@@ -78,42 +78,18 @@ public enum DetectionStrategy {
 
         // private ConcurrentLinkedQueue<MemoryAccess> accesses = new ConcurrentLinkedQueue<>();
 
-        private AtomicLong accessNum = new AtomicLong();
-
-        private Kryo kryo;
-
-        private File folder;
-
         @Override
         public BalokShadowLocation createShadowLocation() {
             return new AsyncShadowLocation();
         }
 
         @Override
-        public MemoryTracker createMemoryTracker(final int tid) {
-            return new AsyncMemoryTracker(queue, kryo, folder, accessNum, tid);
+        public MemoryTracker createMemoryTracker() {
+            return new AsyncMemoryTracker(queue);
         }
 
         @Override
         public void init() {
-            if (RR.outputAccessOption.get()) {
-                kryo = new Kryo();
-                kryo.setReferences(false);
-                kryo.setRegistrationRequired(true);
-                kryo.register(SerializedFrame.class, new FrameSerializer());
-                String folderName = null;
-                if (RR.folderOption.get() != null) {
-                    folderName = RR.folderOption.get();
-                } else {
-                    DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyMMdd-HHmmss").withZone(ZoneId.of("GMT-5"));
-                    folderName = "access-" + formatter.format(Instant.now()) + ".log";
-                }
-                folder = new File(folderName);
-                if (!prepareFolder(folder)) {
-                    System.out.println("Unable to create / clear folder \"" + folder.getAbsolutePath() + "\"");
-                    System.exit(1);
-                }
-            }
             offload.init();
             raceDetectionThread.setPriority(Thread.MAX_PRIORITY);
             raceDetectionThread.start();
@@ -126,24 +102,6 @@ public enum DetectionStrategy {
                 raceDetectionThread.join();
             } catch (InterruptedException e) {
                 e.printStackTrace();
-            }
-            if (RR.outputAccessOption.get()) {
-                System.out.println("The number of memory accesses: " + accessNum.get());
-            }
-        }
-
-        private boolean prepareFolder(File f) {
-            if (f.exists()) {
-                if (!f.isDirectory() || !f.canWrite()) {
-                    return false;
-                } else {
-                    for (File file : f.listFiles()) {
-                        file.delete();
-                    }
-                    return true;
-                }
-            } else {
-                return f.mkdir();
             }
         }
 
@@ -215,7 +173,7 @@ public enum DetectionStrategy {
     };
     public abstract BalokShadowLocation createShadowLocation();
 
-    public abstract MemoryTracker createMemoryTracker(final int tid);
+    public abstract MemoryTracker createMemoryTracker();
 
     public abstract void init();
 

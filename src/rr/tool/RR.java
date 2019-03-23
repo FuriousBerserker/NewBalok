@@ -172,9 +172,6 @@ public class RR {
     public static final CommandLineOption<String> offloadOption =
 			CommandLine.makeString("offload", DetectionStrategy.ASYNC.toString(), CommandLineOption.Kind.STABLE, "Enable offload race detection");
 
-    public static final CommandLineOption<Boolean> outputAccessOption =
-			CommandLine.makeBoolean("outputAccess", false, CommandLineOption.Kind.STABLE, "Output memory accesses into a log file");
-
     public static final CommandLineOption<String> folderOption =
 			CommandLine.makeString("folder", null, CommandLineOption.Kind.STABLE, "Folder that store memory access logs");
 

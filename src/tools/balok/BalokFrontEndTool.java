@@ -6,41 +6,42 @@ import acme.util.decorations.Decoration;
 import acme.util.decorations.DecorationFactory;
 import acme.util.decorations.DefaultValue;
 import acme.util.option.CommandLine;
-
-import balok.causality.*;
-
-import balok.causality.async.ShadowEntry;
-import rr.RRMain;
+import balok.causality.AccessMode;
+import balok.causality.PtpCausalityFactory;
+import balok.causality.TaskTracker;
+import balok.ser.SerializedFrame;
+import com.esotericsoftware.kryo.Kryo;
 import rr.annotations.Abbrev;
 import rr.barrier.BarrierEvent;
 import rr.barrier.BarrierListener;
 import rr.barrier.BarrierMonitor;
+import rr.error.ErrorMessage;
+import rr.error.ErrorMessages;
 import rr.event.*;
+import rr.event.AccessEvent.Kind;
+import rr.meta.ArrayAccessInfo;
+import rr.meta.FieldInfo;
 import rr.state.ShadowLock;
 import rr.state.ShadowThread;
 import rr.state.ShadowVar;
 import rr.state.ShadowVolatile;
 import rr.tool.RR;
 import rr.tool.Tool;
-import rr.error.ErrorMessage;
-import rr.error.ErrorMessages;
-import rr.event.AccessEvent.Kind;
-import rr.meta.ArrayAccessInfo;
-import rr.meta.FieldInfo;
 
+import java.io.File;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.HashSet;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.Phaser;
+import java.util.concurrent.atomic.AtomicLong;
+
 // finished: getResource, ShodowMemoryBuilder, tick
 // finished: VectorEpoch.join, wait/notify, should we do a FT3
 // finished: wait/notify acquire/release barrier
 // TODO: compare async / sync, FlatController
-@Abbrev("Balok")
-public class BalokTool extends Tool implements BarrierListener<BalokBarrierState> {
-
-    // TODO: Currently we just hardcode the memFactory. Later we will get it from program properties
-
-    private DetectionStrategy memFactory = null;
+@Abbrev("BalokFE")
+public class BalokFrontEndTool extends Tool implements BarrierListener<BalokBarrierState> {
 
     private HashSet<Integer> tids = new HashSet<>();
 
@@ -48,9 +49,11 @@ public class BalokTool extends Tool implements BarrierListener<BalokBarrierState
 
     private final PtpCausalityFactory vcFactory = PtpCausalityFactory.VECTOR_MUT;
 
-    public final ErrorMessage<FieldInfo> fieldErrors = ErrorMessages.makeFieldErrorMessage("Balok");
+    private AtomicLong accessNum = new AtomicLong();
 
-    public final ErrorMessage<ArrayAccessInfo> arrayErrors = ErrorMessages.makeArrayErrorMessage("Balok");
+    private Kryo kryo = new Kryo();
+
+    private File folder;
 
     private final Decoration<ShadowLock, BalokLockState> lockVs = ShadowLock.makeDecoration("Balok:ShadowLock",
             DecorationFactory.Type.MULTIPLE, new DefaultValue<ShadowLock, BalokLockState>() {
@@ -68,18 +71,13 @@ public class BalokTool extends Tool implements BarrierListener<BalokBarrierState
                 }
             });
 
-    public BalokTool(String name, Tool next, CommandLine commandLine) {
+    public BalokFrontEndTool(String name, Tool next, CommandLine commandLine) {
         super(name, next, commandLine);
         new BarrierMonitor<BalokBarrierState>(this, new DefaultValue<Object, BalokBarrierState>() {
-            AtomicInteger barrierIDGen = new AtomicInteger();
             @Override
             public BalokBarrierState get(Object o) {
                 BalokBarrierState barrierState = null;
-                if (RR.unitTestOption.get()) {
-                    barrierState = new BalokBarrierState(o, barrierIDGen.getAndIncrement());
-                } else {
-                    barrierState = new BalokBarrierState(o);
-                }
+                barrierState = new BalokBarrierState(o);
                 return barrierState;
             }
         });
@@ -117,10 +115,23 @@ public class BalokTool extends Tool implements BarrierListener<BalokBarrierState
 
     @Override
     public void init() {
-        Util.println("Balok start");
-        Util.println("Offload race detection mode: " + RR.offloadOption.get());
-        memFactory = DetectionStrategy.valueOf(RR.offloadOption.get());
-        memFactory.init();
+        Util.println("Balok frontend start");
+        Util.println("Output memory accesses for backend race detection");
+        kryo.setReferences(false);
+        kryo.setRegistrationRequired(true);
+        kryo.register(SerializedFrame.class, new FrameSerializer());
+        String folderName = null;
+        if (RR.folderOption.get() != null) {
+            folderName = RR.folderOption.get();
+        } else {
+            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyMMdd-HHmmss").withZone(ZoneId.of("GMT-5"));
+            folderName = "access-" + formatter.format(Instant.now()) + ".log";
+        }
+        folder = new File(folderName);
+        if (!prepareFolder(folder)) {
+            Util.println("Unable to create / clear folder \"" + folder.getAbsolutePath() + "\"");
+            System.exit(1);
+        }
         super.init();
     }
 
@@ -130,15 +141,15 @@ public class BalokTool extends Tool implements BarrierListener<BalokBarrierState
 //        while (RRMain.numRunningThreads() != 0) {
 //
 //        }
-        memFactory.fini();
         for (int tid : tids) {
-            Util.println("stop TaskTracker and MemoryTracker for thread " + tid + " before exit");
+            Util.println("Stop TaskTracker and MemoryTracker for thread " + tid + " before exit");
             ShadowThread st = ShadowThread.get(tid);
             TaskTracker task = ts_get_taskTracker(st);
             MemoryTracker mem = ts_get_memTracker(st);
             mem.onEnd(task);
         }
-        Util.println("Balok end");
+        Util.println("Number of memory accesses: " + accessNum.get());
+        Util.println("Balok frontend end");
         super.fini();
     }
 
@@ -162,7 +173,7 @@ public class BalokTool extends Tool implements BarrierListener<BalokBarrierState
             // the timestamp starts from 1, so here we don't need to increase it again
             //childTask.produceEvent();
         }
-        childMem = memFactory.createMemoryTracker();
+        childMem = new OutputAccessMemoryTracker(kryo, folder, accessNum, currentST.getTid());
         ts_set_taskTracker(currentST, childTask);
         ts_set_memTracker(currentST, childMem);
         // Keep this hook for SyncMemoryChecker
@@ -177,9 +188,6 @@ public class BalokTool extends Tool implements BarrierListener<BalokBarrierState
         final MemoryTracker mem = ts_get_memTracker(td);
         //System.out.println("[debug] thread " + td.getTid() + " is end");
         mem.onEnd(task);
-        if (RR.unitTestOption.get()) {
-           Util.printf(task.toString()); 
-        }
         //phaser.arriveAndDeregister();
         //TODO: shall we set task and mem to null to help garbage collection?
         tids.remove(td.getTid());
@@ -269,7 +277,6 @@ public class BalokTool extends Tool implements BarrierListener<BalokBarrierState
         super.volatileAccess(vae);
     }
 
-
     public static boolean readFastPath(final ShadowVar shadow, final ShadowThread st) {
         return false;
     }
@@ -289,8 +296,24 @@ public class BalokTool extends Tool implements BarrierListener<BalokBarrierState
             //TODO: do we need to increase the epoch
             return super.makeShadowVar(event);
         } else {
-            // TODO: shall we store the source info in shadow memory to reduce the memory usage
-            return memFactory.createShadowLocation();
+            return new TicketGenerator();
+        }
+    }
+
+    private boolean prepareFolder(File f) {
+        if (f.exists()) {
+            if (!f.isDirectory() || !f.canWrite()) {
+                return false;
+            } else {
+                for (File file : f.listFiles()) {
+                    if (!file.delete()) {
+                        return false;
+                    }
+                }
+                return true;
+            }
+        } else {
+            return f.mkdir();
         }
     }
 
