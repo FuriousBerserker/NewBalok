@@ -67,10 +67,10 @@ public class OutputAccessMemoryTracker implements MemoryTracker {
     public void onAccess(TaskTracker tracker, BalokShadowLocation loc, AccessMode mode, SourceLocation info, int threadID) {
         //TODO: ADD DEBUGGING INFO
         if (mode == AccessMode.READ) {
-            if (tracker.containsRead(loc)) {
+            if (tracker.containsRead(loc.hashCode())) {
                 return;
             } else {
-                tracker.cacheRead(loc);
+                tracker.cacheRead(loc.hashCode());
             }
         }
 

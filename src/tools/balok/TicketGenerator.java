@@ -1,17 +1,32 @@
 package tools.balok;
 
+import sun.misc.Unsafe;
+
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class TicketGenerator implements BalokShadowLocation {
 
     private static final AtomicInteger hashCodeGen = new AtomicInteger(-2147483648);
 
-    private AtomicInteger ticketGen = new AtomicInteger(-2147483648);
+    private static final Unsafe unsafe = Unsafe.getUnsafe();
 
-    private int hashCode = hashCodeGen.getAndIncrement();
+    private static final long valueOffset;
+
+    //private AtomicInteger ticketGen = new AtomicInteger(-2147483648);
+
+    static {
+        try {
+            valueOffset = unsafe.objectFieldOffset
+                    (TicketGenerator.class.getDeclaredField("ticketGen"));
+        } catch (Exception ex) { throw new Error(ex); }
+    }
+
+    private final int hashCode = hashCodeGen.getAndIncrement();
+
+    private volatile int ticketGen = -2147483648;
 
     public int getTicket() {
-        return ticketGen.getAndIncrement();
+        return unsafe.getAndAddInt(this, valueOffset, 1);
     }
 
     public int getHashCode() {
