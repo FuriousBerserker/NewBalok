@@ -11,6 +11,9 @@ public interface MemoryTracker {
      * @param loc
      * @param mode
      */
+
+    void onLastExclusiveAccess(BalokShadowLocation oldShadow, BalokShadowLocation newShadow);
+
     void onAccess(TaskTracker tracker, BalokShadowLocation loc, AccessMode mode, SourceLocation info, int threadID);
 
     BalokShadowLocation createLocation();

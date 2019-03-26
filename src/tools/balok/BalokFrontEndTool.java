@@ -248,13 +248,45 @@ public class BalokFrontEndTool extends Tool implements BarrierListener<BalokBarr
 
     @Override
     public void access(AccessEvent ae) {
-        if (ae.getOriginalShadow() instanceof BalokShadowLocation) {
-            //TODO: Figure out the usage of getShadow
-            BalokShadowLocation shadow = (BalokShadowLocation)ae.getOriginalShadow();
-            TaskTracker task = ts_get_taskTracker(ae.getThread());
-            MemoryTracker mem = ts_get_memTracker(ae.getThread());
-            mem.onAccess(task, shadow, ae.isWrite() ? AccessMode.WRITE : AccessMode.READ,
-                    ae.getAccessInfo().getLoc(), ae.getThread().getTid());
+        if (ae.getOriginalShadow() instanceof ExclusiveState) {
+            ExclusiveState es = (ExclusiveState)ae.getOriginalShadow();
+            ShadowThread st = ae.getThread();
+            TaskTracker task = ts_get_taskTracker(st);
+            MemoryTracker mem = ts_get_memTracker(st);
+            if (es.isExclusive(st.getTid())) {
+                // exclusive access
+                ExclusiveState newEs = new ExclusiveState(task.createTimestamp(), ae.isWrite() ? AccessMode.WRITE : AccessMode.READ, st.getTid());
+                if (!ae.putShadow(newEs)) {
+                    // fail to update Shadow, not exclusive anymore
+                    TicketGenerator tg = (TicketGenerator) ae.getOriginalShadow();
+                    mem.onAccess(task, tg, ae.isWrite() ? AccessMode.WRITE : AccessMode.READ,
+                            ae.getAccessInfo().getLoc(), st.getTid());
+                }
+            } else {
+                // not exclusive access
+                TicketGenerator newTg = new TicketGenerator();
+                boolean isSuccess = false;
+                boolean isLoop = false;
+                ShadowVar oldShadow = null;
+                do {
+                    oldShadow = ae.getOriginalShadow();
+                    if (oldShadow instanceof ExclusiveState) {
+                        isSuccess = ae.putShadow(newTg);
+                        isLoop = !isSuccess;
+                    } else {
+                        isLoop = false;
+                    }
+                } while (isLoop);
+
+                if (isSuccess) {
+                    // putShadow() will not update originalShadow when the update succeeds
+                    ae.putOriginalShadow(newTg);
+                    mem.onLastExclusiveAccess((BalokShadowLocation) oldShadow, newTg);
+                }
+
+                mem.onAccess(task, (BalokShadowLocation) ae.getOriginalShadow(), ae.isWrite() ? AccessMode.WRITE : AccessMode.READ,
+                        ae.getAccessInfo().getLoc(), st.getTid());
+            }
         } else {
             super.access(ae);
         }
@@ -279,21 +311,25 @@ public class BalokFrontEndTool extends Tool implements BarrierListener<BalokBarr
     }
 
     public static boolean readFastPath(final ShadowVar shadow, final ShadowThread st) {
-        if (shadow instanceof BalokShadowLocation) {
+        if (shadow instanceof TicketGenerator) {
             TaskTracker task = ts_get_taskTracker(st);
             MemoryTracker mem = ts_get_memTracker(st);
             mem.onAccess(task, (BalokShadowLocation)shadow, AccessMode.READ, null, st.getTid());
+            return true;
+        } else {
+            return false;
         }
-        return true;
     }
 
     public static boolean writeFastPath(final ShadowVar shadow, final ShadowThread st) {
-        if (shadow instanceof BalokShadowLocation) {
+        if (shadow instanceof TicketGenerator) {
             TaskTracker task = ts_get_taskTracker(st);
             MemoryTracker mem = ts_get_memTracker(st);
             mem.onAccess(task, (BalokShadowLocation)shadow, AccessMode.WRITE, null, st.getTid());
+            return true;
+        } else {
+            return false;
         }
-        return true;
     }
 
     @Override
@@ -307,7 +343,10 @@ public class BalokFrontEndTool extends Tool implements BarrierListener<BalokBarr
             //TODO: do we need to increase the epoch
             return super.makeShadowVar(event);
         } else {
-            return new TicketGenerator();
+            // we treat initialization as a write
+            ShadowThread st = event.getThread();
+            TaskTracker task = ts_get_taskTracker(st);
+            return new ExclusiveState(task.createTimestamp(), AccessMode.WRITE, st.getTid());
         }
     }
 

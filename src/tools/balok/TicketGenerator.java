@@ -6,6 +6,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 public class TicketGenerator implements BalokShadowLocation {
 
+    public static final int TICKET_START = -2147483648;
+
     private static final AtomicInteger hashCodeGen = new AtomicInteger(-2147483648);
 
     private static final Unsafe unsafe = Unsafe.getUnsafe();
@@ -23,7 +25,7 @@ public class TicketGenerator implements BalokShadowLocation {
 
     private final int hashCode = hashCodeGen.getAndIncrement();
 
-    private volatile int ticketGen = -2147483648;
+    private volatile int ticketGen = TICKET_START + 1;
 
     public int getTicket() {
         return unsafe.getAndAddInt(this, valueOffset, 1);
@@ -32,4 +34,9 @@ public class TicketGenerator implements BalokShadowLocation {
     public int getHashCode() {
         return this.hashCode;
     }
+
+//    @Override
+//    protected void finalize() {
+//
+//    }
 }

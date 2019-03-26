@@ -16,6 +16,7 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.util.concurrent.BlockingDeque;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
@@ -61,6 +62,18 @@ public class OutputAccessMemoryTracker implements MemoryTracker {
     @Override
     public BalokShadowLocation createLocation() {
         return null;
+    }
+
+    @Override
+    public void onLastExclusiveAccess(BalokShadowLocation oldShadow, BalokShadowLocation newShadow) {
+        ExclusiveState es = (ExclusiveState)oldShadow;
+        TicketGenerator tg = (TicketGenerator)newShadow;
+        currentFrame.add(tg.getHashCode(), es.getMode(), es.getEvent(), TicketGenerator.TICKET_START);
+        if (currentFrame.isFull()) {
+            SerializedFrame<Epoch> frame = currentFrame.build();
+            kryo.writeObject(oOutput, frame);
+            accessNum.addAndGet(frame.size());
+        }
     }
 
     @Override

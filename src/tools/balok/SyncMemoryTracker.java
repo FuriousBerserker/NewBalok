@@ -5,7 +5,12 @@ import balok.causality.TaskTracker;
 import rr.meta.SourceLocation;
 
 public class SyncMemoryTracker implements MemoryTracker {
-    
+
+    @Override
+    public void onLastExclusiveAccess(BalokShadowLocation oldShadow, BalokShadowLocation newShadow) {
+
+    }
+
     @Override
     public void onAccess(TaskTracker tracker, BalokShadowLocation loc, AccessMode mode, SourceLocation info, int threadID) {
         SyncShadowLocation shadow = (SyncShadowLocation)loc;

@@ -10,6 +10,11 @@ public class NoCheckMemoryTracker implements MemoryTracker {
     };
 
     @Override
+    public void onLastExclusiveAccess(BalokShadowLocation oldShadow, BalokShadowLocation newShadow) {
+
+    }
+
+    @Override
     public void onAccess(TaskTracker tracker, BalokShadowLocation loc, AccessMode mode, SourceLocation info, int threadID) {
     }
 
