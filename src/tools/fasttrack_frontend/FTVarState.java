@@ -36,32 +36,50 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
  ******************************************************************************/
 
-package tools.fasttrack;
+package tools.fasttrack_frontend;
 
-import acme.util.Util;
-import rr.state.ShadowVolatile;
-import tools.util.VectorClock;
+import rr.state.ShadowVar;
+import tools.util.Epoch;
 
-public class FTVolatileState extends VectorClock {
-	// inherited values field: protected by peer.
-	// RR ensures that peer is held when volatile access handler
-	//  is called.
-
-	private final ShadowVolatile peer;
+public class FTVarState extends VectorClock implements ShadowVar {	
+	// inherited values field:
+	//   * if R != SHARED, then values and values[*] are protected by this.
+	//   * if R == SHARED, then:
+	//       - values is write-protected by this;
+	//       - values[i] is write-protected by this;
+	//       - values[i] is only written thread i.
+	//       - values[i] is only read without the lock by thread i.
+    //      Thus, once we become SHARED, only thread i updates
+	//      values[i] and only thread i reads values[i] without holding
+	//      the lock, so no races exist due to program order.
 	
-	public FTVolatileState(ShadowVolatile peer, int size) {
-		super(size);
-		this.peer = peer;
+	// Write-protected by this => No concurrent writes when lock held.
+	public volatile int/*epoch*/ W;
+	
+	// Write-protected by this => No concurrent writes when lock held.
+	// if R == Epoch.SHARED, it will never change again. 
+	public volatile int/*epoch*/ R;
+
+	protected FTVarState() {
+	}
+	
+	public FTVarState(boolean isWrite, int/*epoch*/ epoch) {
+		if (isWrite) {
+			R = Epoch.ZERO;
+			W = epoch; 
+		} else {
+			W = Epoch.ZERO;
+			R = epoch; 
+		}		
 	}
 
-	public ShadowVolatile getPeer() {
-		return peer;
+	@Override
+	public synchronized void makeCV(int len) {
+		super.makeCV(len);
 	}
 
 	@Override
 	public synchronized String toString() {
-		return String.format("[peer %s: %s]",  Util.objectToIdentityString(peer), super.toString());
+		return String.format("[W=%s R=%s V=%s]", Epoch.toString(W), Epoch.toString(R), super.toString());
 	}
-
-
 }

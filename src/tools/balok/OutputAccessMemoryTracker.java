@@ -75,7 +75,7 @@ public class OutputAccessMemoryTracker implements MemoryTracker {
         if (currentFrame.isFull()) {
             SerializedFrame<Epoch> frame = currentFrame.build();
             kryo.writeObject(oOutput, frame);
-            accessNum.addAndGet(frame.size());
+            accessNum.getAndAdd(frame.size());
         }
     }
 
@@ -103,7 +103,7 @@ public class OutputAccessMemoryTracker implements MemoryTracker {
         if (currentFrame.isFull()) {
             SerializedFrame<Epoch> frame = currentFrame.build();
             kryo.writeObject(oOutput, frame);
-            accessNum.addAndGet(frame.size());
+            accessNum.getAndAdd(frame.size());
         }
     }
 
@@ -117,7 +117,7 @@ public class OutputAccessMemoryTracker implements MemoryTracker {
         if (!currentFrame.isEmpty()) {
             SerializedFrame<Epoch> frame = currentFrame.build();
             kryo.writeObject(oOutput, frame);
-            accessNum.addAndGet(frame.size());
+            accessNum.getAndAdd(frame.size());
         }
         oOutput.close();
         active.set(false);

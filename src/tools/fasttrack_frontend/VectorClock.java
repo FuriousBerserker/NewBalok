@@ -36,11 +36,12 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
  ******************************************************************************/
 
-package tools.util;
-
-import java.io.Serializable;
+package tools.fasttrack_frontend;
 
 import acme.util.Assert;
+import tools.util.Epoch;
+
+import java.io.Serializable;
 
 /**
  * VectorClock are mutable, extensible functions from ShadowThread 

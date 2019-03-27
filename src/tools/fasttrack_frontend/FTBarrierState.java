@@ -36,31 +36,41 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
  ******************************************************************************/
 
-package tools.fasttrack;
+package tools.fasttrack_frontend;
 
 import acme.util.Util;
-import rr.state.ShadowLock;
-import tools.util.VectorClock;
 
-public class FTLockState extends VectorClock {
-
-	// inherited values field: protected by peer.getLock().
-	// That lock will be held during acquire/release/wait events.
-
-	private final ShadowLock peer;
+public class FTBarrierState {
 	
-	public FTLockState(ShadowLock peer, int size) {
-		super(size);
-		this.peer = peer;
+	private final Object barrier;
+	
+	// clock used to record the max of all threads upon entry
+	// the clock field is protected by this.
+	// barrier must be held when performing any operations on clock.
+	private VectorClock clock; 
+	
+	public FTBarrierState(Object k, int size) {
+		clock = new VectorClock(size);
+		barrier = k;
 	}
 
-	public ShadowLock getPeer() {
-		return peer;
+	/*
+	 * Each thread should call this upon exiting the barrier.  It 
+	 * ensure the barrier has created a new vector clock to use
+	 * as threads enter during the next round.  
+	 */
+	public synchronized void stopUsingOldVectorClock(VectorClock old) {
+		if (clock == old) {
+			clock = new VectorClock(old.size());
+		}
 	}
 
-	@Override
+	public synchronized VectorClock enterBarrier() {
+		return clock;
+	}
+
 	public synchronized String toString() {
-		return String.format("[peer %s: %s]",  Util.objectToIdentityString(peer), super.toString());
+		return "[peer " + Util.objectToIdentityString(barrier) + ": " + clock + "]"; 
 	}
 
 

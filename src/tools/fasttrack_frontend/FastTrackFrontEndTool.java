@@ -37,8 +37,19 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  ******************************************************************************/
 
 
-package tools.fasttrack;
+package tools.fasttrack_frontend;
 
+import acme.util.Assert;
+import acme.util.Util;
+import acme.util.count.AggregateCounter;
+import acme.util.count.ThreadLocalCounter;
+import acme.util.decorations.Decoration;
+import acme.util.decorations.DecorationFactory.Type;
+import acme.util.decorations.DefaultValue;
+import acme.util.decorations.NullDefault;
+import acme.util.io.XMLWriter;
+import acme.util.option.CommandLine;
+import com.esotericsoftware.kryo.Kryo;
 import rr.RRMain;
 import rr.annotations.Abbrev;
 import rr.barrier.BarrierEvent;
@@ -46,47 +57,25 @@ import rr.barrier.BarrierListener;
 import rr.barrier.BarrierMonitor;
 import rr.error.ErrorMessage;
 import rr.error.ErrorMessages;
-import rr.event.AccessEvent;
+import rr.event.*;
 import rr.event.AccessEvent.Kind;
-import rr.event.AcquireEvent;
-import rr.event.ArrayAccessEvent;
-import rr.event.ClassAccessedEvent;
-import rr.event.ClassInitializedEvent;
-import rr.event.Event;
-import rr.event.FieldAccessEvent;
-import rr.event.JoinEvent;
-import rr.event.NewThreadEvent;
-import rr.event.ReleaseEvent;
-import rr.event.StartEvent;
-import rr.event.VolatileAccessEvent;
-import rr.event.WaitEvent;
 import rr.instrument.classes.ArrayAllocSiteTracker;
-import rr.meta.ArrayAccessInfo;
-import rr.meta.ClassInfo;
-import rr.meta.FieldInfo;
-import rr.meta.MetaDataInfoMaps;
-import rr.meta.OperationInfo;
+import rr.meta.*;
 import rr.state.ShadowLock;
 import rr.state.ShadowThread;
 import rr.state.ShadowVar;
 import rr.state.ShadowVolatile;
 import rr.tool.RR;
 import rr.tool.Tool;
+import tools.balok.TicketGenerator;
 import tools.util.Epoch;
-import tools.util.VectorClock;
-import acme.util.Assert;
-import acme.util.Util;
-import acme.util.Yikes;
-import acme.util.count.AggregateCounter;
-import acme.util.count.Counter;
-import acme.util.count.ThreadLocalCounter;
-import acme.util.decorations.Decoration;
-import acme.util.decorations.DecorationFactory;
-import acme.util.decorations.DecorationFactory.Type;
-import acme.util.decorations.DefaultValue;
-import acme.util.decorations.NullDefault;
-import acme.util.io.XMLWriter;
-import acme.util.option.CommandLine;
+
+import java.io.File;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.util.HashSet;
+import java.util.concurrent.atomic.AtomicLong;
 
 /*
  * A revised FastTrack Tool.  This makes several improvements over the original:
@@ -105,8 +94,8 @@ import acme.util.option.CommandLine;
  * The performance over the JavaGrande and DaCapo benchmarks is more or less
  * identical to the old implementation (within ~1% overall in our tests).
  */
-@Abbrev("FT2")
-public class FastTrackTool extends Tool implements BarrierListener<FTBarrierState>  {
+@Abbrev("FT2FE")
+public class FastTrackFrontEndTool extends Tool implements BarrierListener<FTBarrierState>  {
 
 	private static final boolean COUNT_OPERATIONS = RRMain.slowMode();
 	private static final int INIT_VECTOR_CLOCK_SIZE = 4;
@@ -116,21 +105,29 @@ public class FastTrackTool extends Tool implements BarrierListener<FTBarrierStat
 
 	private final VectorClock maxEpochPerTid = new VectorClock(INIT_VECTOR_CLOCK_SIZE);
 
+	private HashSet<Integer> tids = new HashSet<>();
+
+	private AtomicLong accessNum = new AtomicLong();
+
+	private Kryo kryo = new Kryo();
+
+	private File folder;
+
 	// guarded by classInitTime
-	public static final Decoration<ClassInfo,VectorClock> classInitTime = MetaDataInfoMaps.getClasses().makeDecoration("FastTrack:ClassInitTime", Type.MULTIPLE, 
+	public static final Decoration<ClassInfo,VectorClock> classInitTime = MetaDataInfoMaps.getClasses().makeDecoration("FastTrack:ClassInitTime", Type.MULTIPLE,
 			new DefaultValue<ClassInfo,VectorClock>() {
 		public VectorClock get(ClassInfo st) {
 			return new VectorClock(INIT_VECTOR_CLOCK_SIZE);
 		}
 	});
-	
+
 	public static VectorClock getClassInitTime(ClassInfo ci) {
 		synchronized(classInitTime) {
 			return classInitTime.get(ci);
 		}
 	}
 
-	public FastTrackTool(final String name, final Tool next, CommandLine commandLine) {
+	public FastTrackFrontEndTool(final String name, final Tool next, CommandLine commandLine) {
 		super(name, next, commandLine);
 		new BarrierMonitor<FTBarrierState>(this, new DefaultValue<Object,FTBarrierState>() {
 			public FTBarrierState get(Object k) {
@@ -139,27 +136,27 @@ public class FastTrackTool extends Tool implements BarrierListener<FTBarrierStat
 		});
 	}
 
-	/* 
+	/*
 	 * Shadow State:
 	 *   St.E -- epoch decoration on ShadowThread
 	 *          - Thread-local.  Never access from a different thread
-	 *   
+	 *
 	 *   St.V -- VectorClock decoration on ShadowThread
 	 *          - Thread-local while thread is running.
 	 *          - The thread starting t may access st.V before the start.
 	 *          - Any thread joining on t may read st.V after the join.
-	 *   
+	 *
 	 *   Sm.V -- FTLockState decoration on ShadowLock
 	 *          - See FTLockState for synchronization rules.
-	 *   
+	 *
 	 *   Sx.R,Sx.W,Sx.V -- FTVarState objects
 	 *          - See FTVarState for synchronization rules.
-	 *             
+	 *
 	 *   Svx.V -- FTVolatileState decoration on ShadowVolatile  (serves same purpose as L for volatiles)
 	 *          - See FTVolatileState for synchronization rules.
 	 *
-	 *   Sb.V -- FTBarrierState decoration on Barriers 
-	 *          - See FTBarrierState for synchronization rules.   
+	 *   Sb.V -- FTBarrierState decoration on Barriers
+	 *          - See FTBarrierState for synchronization rules.
 	 */
 
 	// invariant: st.E == st.V(st.tid)
@@ -169,6 +166,9 @@ public class FastTrackTool extends Tool implements BarrierListener<FTBarrierStat
 	protected static VectorClock ts_get_V(ShadowThread st) { Assert.panic("Bad");	return null; }
 	protected static void ts_set_V(ShadowThread st, VectorClock V) { Assert.panic("Bad");  }
 
+	protected static FTMemoryTracker ts_get_FTMemoryTracker(ShadowThread st) { Assert.panic("Bad");	return null; }
+	protected static void ts_set_FTMemoryTracker(ShadowThread st, FTMemoryTracker tracker) { Assert.panic("Bad");  }
+
 
 	protected void maxAndIncEpochAndCV(ShadowThread st, VectorClock other, OperationInfo info) {
 		final int tid = st.getTid();
@@ -176,6 +176,8 @@ public class FastTrackTool extends Tool implements BarrierListener<FTBarrierStat
 		tV.max(other);
 		tV.tick(tid);
 		ts_set_E(st, tV.get(tid));
+		FTMemoryTracker mem = ts_get_FTMemoryTracker(st);
+		mem.onSync();
 	}
 
 	protected void maxEpochAndCV(ShadowThread st, VectorClock other, OperationInfo info) {
@@ -190,10 +192,12 @@ public class FastTrackTool extends Tool implements BarrierListener<FTBarrierStat
 		final VectorClock tV = ts_get_V(st);
 		tV.tick(tid);
 		ts_set_E(st, tV.get(tid));
+		FTMemoryTracker mem = ts_get_FTMemoryTracker(st);
+		mem.onSync();
 	}
 
 
-	static final Decoration<ShadowLock,FTLockState> lockVs = ShadowLock.makeDecoration("FastTrack:ShadowLock", DecorationFactory.Type.MULTIPLE,
+	static final Decoration<ShadowLock,FTLockState> lockVs = ShadowLock.makeDecoration("FastTrack:ShadowLock", Type.MULTIPLE,
 			new DefaultValue<ShadowLock,FTLockState>() { public FTLockState get(final ShadowLock lock) { return new FTLockState(lock, INIT_VECTOR_CLOCK_SIZE); }});
 
 	// only call when ld.peer() is held
@@ -201,7 +205,7 @@ public class FastTrackTool extends Tool implements BarrierListener<FTBarrierStat
 		return lockVs.get(ld);
 	}
 
-	static final Decoration<ShadowVolatile,FTVolatileState> volatileVs = ShadowVolatile.makeDecoration("FastTrack:shadowVolatile", DecorationFactory.Type.MULTIPLE,
+	static final Decoration<ShadowVolatile,FTVolatileState> volatileVs = ShadowVolatile.makeDecoration("FastTrack:shadowVolatile", Type.MULTIPLE,
 			new DefaultValue<ShadowVolatile,FTVolatileState>() { public FTVolatileState get(final ShadowVolatile vol) { return new FTVolatileState(vol, INIT_VECTOR_CLOCK_SIZE); }});
 
 	// only call when we are in an event handler for the volatile field.
@@ -218,14 +222,57 @@ public class FastTrackTool extends Tool implements BarrierListener<FTBarrierStat
 			volV.max(ts_get_V(st));
 			return super.makeShadowVar(event);
 		} else {
-			return new FTVarState(event.isWrite(), ts_get_E(event.getThread()));
+			ShadowThread st = event.getThread();
+			int tid = st.getTid();
+			int epoch = ts_get_E(st);
+			return new ExclusiveFTState(epoch, true, tid);
 		}
 	}
 
+	@Override
+	public void init() {
+		Util.println("FT2 frontend start");
+		Util.println("Output memory accesses for backend race detection");
+		kryo.setReferences(false);
+		kryo.setRegistrationRequired(true);
+		kryo.register(FTSerializedState.class, new FTSerializedStateSerializer());
+		String folderName = null;
+		if (RR.folderOption.get() != null) {
+			folderName = RR.folderOption.get();
+		} else {
+			DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyMMdd-HHmmss").withZone(ZoneId.of("GMT-5"));
+			folderName = "access-" + formatter.format(Instant.now()) + ".log";
+		}
+		folder = new File(folderName);
+		if (!prepareFolder(folder)) {
+			Util.println("Unable to create / clear folder \"" + folder.getAbsolutePath() + "\"");
+			System.exit(1);
+		}
+		super.init();
+	}
+
+	@Override
+	public void fini() {
+		//phaser.arriveAndAwaitAdvance();
+//        while (RRMain.numRunningThreads() != 0) {
+//
+//        }
+		for (int tid : tids) {
+			Util.println("Stop FTMemoryTracker for thread " + tid + " before exit");
+			ShadowThread st = ShadowThread.get(tid);
+			FTMemoryTracker mem = ts_get_FTMemoryTracker(st);
+			mem.onEnd();
+		}
+		Util.println("Number of memory accesses: " + accessNum.get());
+		Util.println("FT2 frontend end");
+		super.fini();
+	}
 
 	@Override
 	public void create(NewThreadEvent event) {
 		final ShadowThread st = event.getThread();
+		FTMemoryTracker mem = new FTMemoryTracker(kryo, folder, accessNum, st.getTid());
+		ts_set_FTMemoryTracker(st, mem);
 
 		if (ts_get_V(st) == null) {
 			final int tid = st.getTid();
@@ -239,7 +286,7 @@ public class FastTrackTool extends Tool implements BarrierListener<FTBarrierStat
 			incEpochAndCV(st, null);
 			Util.log("Initial E for " + tid + ": " + Epoch.toString(ts_get_E(st)));
 		}
-
+		tids.add(st.getTid());
 		super.create(event);
 
 	}
@@ -285,30 +332,78 @@ public class FastTrackTool extends Tool implements BarrierListener<FTBarrierStat
 
 	@Override
 	public void access(final AccessEvent event) {
-		final ShadowThread st = event.getThread();
-		final ShadowVar shadow = getOriginalOrBad(event.getOriginalShadow(), st);
+//		final ShadowThread st = event.getThread();
+//		final ShadowVar shadow = getOriginalOrBad(event.getOriginalShadow(), st);
+//
+//		if (shadow instanceof FTVarState) {
+//			FTVarState sx = (FTVarState)shadow;
+//
+//			Object target = event.getTarget();
+//			if (target == null) {
+//				ClassInfo owner = ((FieldAccessEvent)event).getInfo().getField().getOwner();
+//				final VectorClock tV = ts_get_V(st);
+//				synchronized (classInitTime) {
+//					VectorClock initTime = classInitTime.get(owner);
+//					maxEpochAndCV(st, initTime, event.getAccessInfo()); // won't change current epoch
+//				}
+//			}
+//
+//			if (event.isWrite()) {
+//				write(event, st, sx);
+//			} else {
+//				read(event, st, sx);
+//			}
+//		} else {
+//			super.access(event);
+//		}
 
-		if (shadow instanceof FTVarState) {
-			FTVarState sx = (FTVarState)shadow;
-
-			Object target = event.getTarget();
-			if (target == null) {
-				ClassInfo owner = ((FieldAccessEvent)event).getInfo().getField().getOwner();
-				final VectorClock tV = ts_get_V(st);
-				synchronized (classInitTime) {
-					VectorClock initTime = classInitTime.get(owner);
-					maxEpochAndCV(st, initTime, event.getAccessInfo()); // won't change current epoch
+		if (event.getOriginalShadow() instanceof ExclusiveFTState) {
+			ExclusiveFTState es = (ExclusiveFTState)event.getOriginalShadow();
+			ShadowThread st = event.getThread();
+			int tid = st.getTid();
+			if (es.isExclusive(tid)) {
+				// exclusive access
+				int epoch = ts_get_E(st);
+				ExclusiveFTState newEs = new ExclusiveFTState(epoch, event.isWrite(), tid);
+				if (!event.putShadow(newEs)) {
+					// fail to update Shadow, not exclusive anymore
+					TicketGenerator tg = (TicketGenerator) event.getOriginalShadow();
+					FTMemoryTracker mem = ts_get_FTMemoryTracker(st);
+					VectorClock vc = ts_get_V(st);
+					//mem.onAccess(tg.getHashCode(), event.isWrite(), vc.getValues(), tg.getTicket());
 				}
-			}
-
-			if (event.isWrite()) {
-				write(event, st, sx);
 			} else {
-				read(event, st, sx);
+				// not exclusive access
+				TicketGenerator newTg = new TicketGenerator();
+				boolean isSuccess = false;
+				boolean isLoop = false;
+				ShadowVar oldShadow = null;
+				FTMemoryTracker mem = ts_get_FTMemoryTracker(st);
+				do {
+					oldShadow = event.getOriginalShadow();
+					if (oldShadow instanceof ExclusiveFTState) {
+						isSuccess = event.putShadow(newTg);
+						isLoop = !isSuccess;
+					} else {
+						isLoop = false;
+					}
+				} while (isLoop);
+
+				if (isSuccess) {
+					// putShadow() will not update originalShadow when the update succeeds
+					event.putOriginalShadow(newTg);
+					ExclusiveFTState oldEs = (ExclusiveFTState) oldShadow;
+					mem.onLastExclusiveAccess(newTg.getHashCode(), oldEs.isWrite(), oldEs.getEpoch(), newTg.getTicket(), oldEs.getLastTid());
+				} else {
+					newTg = (TicketGenerator)event.getOriginalShadow();
+				}
+				VectorClock vc = ts_get_V(st);
+				//mem.onAccess(newTg.getHashCode(), event.isWrite(), vc.getValues(), newTg.getTicket());
 			}
 		} else {
 			super.access(event);
 		}
+
 	}
 
 
@@ -333,7 +428,7 @@ public class FastTrackTool extends Tool implements BarrierListener<FTBarrierStat
 	private static final ThreadLocalCounter wait = new ThreadLocalCounter("FT", "Wait", RR.maxTidOption.get());
 	private static final ThreadLocalCounter vol = new ThreadLocalCounter("FT", "Volatile", RR.maxTidOption.get());
 
-	
+
 	private static final ThreadLocalCounter other = new ThreadLocalCounter("FT", "Other", RR.maxTidOption.get());
 
 	static {
@@ -364,13 +459,13 @@ public class FastTrackTool extends Tool implements BarrierListener<FTBarrierStat
 			final int/*epoch*/ w = sx.W;
 			final int wTid = Epoch.tid(w);
 			final int tid = st.getTid();
-			
+
 			if (wTid != tid && !Epoch.leq(w, tV.get(wTid))) {
 				if (COUNT_OPERATIONS) writeReadError.inc(tid);
 				error(event, sx, "Write-Read Race", "Write by ", wTid, "Read by ", tid);
-				// best effort recovery: 
+				// best effort recovery:
 				return;
-			} 
+			}
 
 			if (r != Epoch.READ_SHARED) {
 				final int rTid = Epoch.tid(r);
@@ -379,7 +474,7 @@ public class FastTrackTool extends Tool implements BarrierListener<FTBarrierStat
 					sx.R = e;
 				} else {
 					if (COUNT_OPERATIONS) readShare.inc(tid);
-					int initSize = Math.max(Math.max(rTid,tid), INIT_VECTOR_CLOCK_SIZE); 
+					int initSize = Math.max(Math.max(rTid,tid), INIT_VECTOR_CLOCK_SIZE);
 					sx.makeCV(initSize);
 					sx.set(rTid, r);
 					sx.set(tid, e);
@@ -387,59 +482,68 @@ public class FastTrackTool extends Tool implements BarrierListener<FTBarrierStat
 				}
 			} else {
 				if (COUNT_OPERATIONS) readShared.inc(tid);
-				sx.set(tid, e);					
+				sx.set(tid, e);
 			}
 		}
 	}
 
 
 	public static boolean readFastPath(final ShadowVar shadow, final ShadowThread st) {
-		if (shadow instanceof FTVarState) {
-			final FTVarState sx = ((FTVarState)shadow);
-
-			final int/*epoch*/ e = ts_get_E(st);
-
-			/* optional */ {
-				final int/*epoch*/ r = sx.R;
-				if (r == e) {
-					if (COUNT_OPERATIONS) readSameEpoch.inc(st.getTid());
-					return true;
-				} else if (r == Epoch.READ_SHARED && sx.get(st.getTid()) == e) {
-					if (COUNT_OPERATIONS) readSharedSameEpoch.inc(st.getTid());
-					return true;
-				}
-			}
-
-			synchronized(sx) {
-				final int tid = st.getTid();
-				final VectorClock tV = ts_get_V(st);
-				final int/*epoch*/ r = sx.R;
-				final int/*epoch*/ w = sx.W;
-				final int wTid = Epoch.tid(w);
-				if (wTid != tid && !Epoch.leq(w, tV.get(wTid))) {
-					ts_set_badVarState(st, sx);
-					return false;
-				}
-
-				if (r != Epoch.READ_SHARED) {
-					final int rTid = Epoch.tid(r);
-					if (rTid == tid || Epoch.leq(r, tV.get(rTid))) {
-						if (COUNT_OPERATIONS) readExclusive.inc(tid);
-						sx.R = e;
-					} else {
-						if (COUNT_OPERATIONS) readShare.inc(tid);
-						int initSize = Math.max(Math.max(rTid,tid), INIT_VECTOR_CLOCK_SIZE); 
-						sx.makeCV(initSize);
-						sx.set(rTid, r);
-						sx.set(tid, e);
-						sx.R = Epoch.READ_SHARED;
-					}
-				} else {
-					if (COUNT_OPERATIONS) readShared.inc(tid);
-					sx.set(tid, e);					
-				}
-				return true;
-			}
+//		if (shadow instanceof FTVarState) {
+//			final FTVarState sx = ((FTVarState)shadow);
+//
+//			final int/*epoch*/ e = ts_get_E(st);
+//
+//			/* optional */ {
+//				final int/*epoch*/ r = sx.R;
+//				if (r == e) {
+//					if (COUNT_OPERATIONS) readSameEpoch.inc(st.getTid());
+//					return true;
+//				} else if (r == Epoch.READ_SHARED && sx.get(st.getTid()) == e) {
+//					if (COUNT_OPERATIONS) readSharedSameEpoch.inc(st.getTid());
+//					return true;
+//				}
+//			}
+//
+//			synchronized(sx) {
+//				final int tid = st.getTid();
+//				final VectorClock tV = ts_get_V(st);
+//				final int/*epoch*/ r = sx.R;
+//				final int/*epoch*/ w = sx.W;
+//				final int wTid = Epoch.tid(w);
+//				if (wTid != tid && !Epoch.leq(w, tV.get(wTid))) {
+//					ts_set_badVarState(st, sx);
+//					return false;
+//				}
+//
+//				if (r != Epoch.READ_SHARED) {
+//					final int rTid = Epoch.tid(r);
+//					if (rTid == tid || Epoch.leq(r, tV.get(rTid))) {
+//						if (COUNT_OPERATIONS) readExclusive.inc(tid);
+//						sx.R = e;
+//					} else {
+//						if (COUNT_OPERATIONS) readShare.inc(tid);
+//						int initSize = Math.max(Math.max(rTid,tid), INIT_VECTOR_CLOCK_SIZE);
+//						sx.makeCV(initSize);
+//						sx.set(rTid, r);
+//						sx.set(tid, e);
+//						sx.R = Epoch.READ_SHARED;
+//					}
+//				} else {
+//					if (COUNT_OPERATIONS) readShared.inc(tid);
+//					sx.set(tid, e);
+//				}
+//				return true;
+//			}
+//		} else {
+//			return false;
+//		}
+		if (shadow instanceof TicketGenerator) {
+			TicketGenerator tg = (TicketGenerator) shadow;
+			FTMemoryTracker mem = ts_get_FTMemoryTracker(st);
+			VectorClock v = ts_get_V(st);
+			mem.onAccess(tg.getHashCode(), false, v.getValues(), tg.getTicket());
+			return true;
 		} else {
 			return false;
 		}
@@ -461,7 +565,7 @@ public class FastTrackTool extends Tool implements BarrierListener<FTBarrierStat
 
 		synchronized(sx) {
 			final int/*epoch*/ w = sx.W;
-			final int wTid = Epoch.tid(w);				
+			final int wTid = Epoch.tid(w);
 			final int tid = st.getTid();
 			final VectorClock tV = ts_get_V(st);
 
@@ -469,8 +573,8 @@ public class FastTrackTool extends Tool implements BarrierListener<FTBarrierStat
 				if (COUNT_OPERATIONS) writeWriteError.inc(tid);
 				error(event, sx, "Write-Write Race", "Write by ", wTid, "Write by ", tid);
 			}
-			
-			final int/*epoch*/ r = sx.R;				
+
+			final int/*epoch*/ r = sx.R;
 			if (r != Epoch.READ_SHARED) {
 				final int rTid = Epoch.tid(r);
 				if (rTid != tid /* optimization */ && !Epoch.leq(r, tV.get(rTid))) {
@@ -495,48 +599,58 @@ public class FastTrackTool extends Tool implements BarrierListener<FTBarrierStat
 
 	// only count events when returning true;
 	public static boolean writeFastPath(final ShadowVar shadow, final ShadowThread st) {
-		if (shadow instanceof FTVarState) {
-			final FTVarState sx = ((FTVarState)shadow);
+//		if (shadow instanceof FTVarState) {
+//			final FTVarState sx = ((FTVarState)shadow);
+//
+//			final int/*epoch*/ E = ts_get_E(st);
+//
+//			/* optional */ {
+//				final int/*epoch*/ w = sx.W;
+//				if (w == E) {
+//					if (COUNT_OPERATIONS) writeSameEpoch.inc(st.getTid());
+//					return true;
+//				}
+//			}
+//
+//			synchronized(sx) {
+//				final int tid = st.getTid();
+//				final int/*epoch*/ w = sx.W;
+//				final int wTid = Epoch.tid(w);
+//				final VectorClock tV = ts_get_V(st);
+//
+//				if (wTid != tid && !Epoch.leq(w, tV.get(wTid))) {
+//					ts_set_badVarState(st, sx);
+//					return false;
+//				}
+//
+//				final int/*epoch*/ r = sx.R;
+//				if (r != Epoch.READ_SHARED) {
+//					final int rTid = Epoch.tid(r);
+//					if (rTid != tid && !Epoch.leq(r, tV.get(rTid))) {
+//						ts_set_badVarState(st, sx);
+//						return false;
+//					}
+//					if (COUNT_OPERATIONS) writeExclusive.inc(tid);
+//				} else {
+//					if (sx.anyGt(tV)) {
+//						ts_set_badVarState(st, sx);
+//						return false;
+//					}
+//					if (COUNT_OPERATIONS) writeShared.inc(tid);
+//				}
+//				sx.W = E;
+//				return true;
+//			}
+//		} else {
+//			return false;
+//		}
 
-			final int/*epoch*/ E = ts_get_E(st);
-
-			/* optional */ {
-				final int/*epoch*/ w = sx.W;
-				if (w == E) {
-					if (COUNT_OPERATIONS) writeSameEpoch.inc(st.getTid());
-					return true;
-				}
-			}
-
-			synchronized(sx) {
-				final int tid = st.getTid();
-				final int/*epoch*/ w = sx.W;
-				final int wTid = Epoch.tid(w);
-				final VectorClock tV = ts_get_V(st);
-
-				if (wTid != tid && !Epoch.leq(w, tV.get(wTid))) {
-					ts_set_badVarState(st, sx);
-					return false;
-				}
-
-				final int/*epoch*/ r = sx.R;				
-				if (r != Epoch.READ_SHARED) {
-					final int rTid = Epoch.tid(r);
-					if (rTid != tid && !Epoch.leq(r, tV.get(rTid))) {
-						ts_set_badVarState(st, sx);
-						return false;
-					}
-					if (COUNT_OPERATIONS) writeExclusive.inc(tid);
-				} else {
-					if (sx.anyGt(tV)) {
-						ts_set_badVarState(st, sx);
-						return false;
-					}
-					if (COUNT_OPERATIONS) writeShared.inc(tid);
-				}
-				sx.W = E;
-				return true;
-			}
+		if (shadow instanceof TicketGenerator) {
+			TicketGenerator tg = (TicketGenerator) shadow;
+			FTMemoryTracker mem = ts_get_FTMemoryTracker(st);
+			VectorClock v = ts_get_V(st);
+			mem.onAccess(tg.getHashCode(), true, v.getValues(), tg.getTicket());
+			return true;
 		} else {
 			return false;
 		}
@@ -553,7 +667,7 @@ public class FastTrackTool extends Tool implements BarrierListener<FTBarrierStat
 		if (event.isWrite()) {
 			final VectorClock tV = ts_get_V(st);
 			volV.max(tV);
-			incEpochAndCV(st, event.getAccessInfo()); 		
+			incEpochAndCV(st, event.getAccessInfo());
 		} else {
 			maxEpochAndCV(st, volV, event.getAccessInfo());
 		}
@@ -570,13 +684,13 @@ public class FastTrackTool extends Tool implements BarrierListener<FTBarrierStat
 		final ShadowThread su = event.getNewThread();
 		final VectorClock tV = ts_get_V(st);
 
-		/* 
-		 * Safe to access su.V, because u has not started yet.  
-		 * This will give us exclusive access to it.  There may 
+		/*
+		 * Safe to access su.V, because u has not started yet.
+		 * This will give us exclusive access to it.  There may
 		 * be a race if two or more threads race are starting u, but
 		 * of course, a second attempt to start u will crash...
-		 * 
-		 * RR guarantees that the forked thread will synchronize with 
+		 *
+		 * RR guarantees that the forked thread will synchronize with
 		 * thread t before it does anything else.
 		 */
 		maxAndIncEpochAndCV(su, tV, event.getInfo());
@@ -592,6 +706,9 @@ public class FastTrackTool extends Tool implements BarrierListener<FTBarrierStat
 		synchronized (maxEpochPerTid) {
 			maxEpochPerTid.set(st.getTid(), ts_get_E(st));
 		}
+		FTMemoryTracker mem = ts_get_FTMemoryTracker(st);
+		mem.onEnd();
+		tids.remove(st.getTid());
 		super.stop(st);
 		if (COUNT_OPERATIONS) other.inc(st.getTid());
 	}
@@ -610,7 +727,7 @@ public class FastTrackTool extends Tool implements BarrierListener<FTBarrierStat
 		// no need to inc su's clock here -- that was just for
 		// the proof in the original FastTrack rules.
 
-		super.postJoin(event);	
+		super.postJoin(event);
 		if (COUNT_OPERATIONS) join.inc(st.getTid());
 	}
 
@@ -626,7 +743,7 @@ public class FastTrackTool extends Tool implements BarrierListener<FTBarrierStat
 	}
 
 	@Override
-	public void postWait(WaitEvent event) { 
+	public void postWait(WaitEvent event) {
 		final ShadowThread st = event.getThread();
 		final VectorClock lockV = getV(event.getLock());
 		maxEpochAndCV(st, lockV, event.getInfo()); // we hold lock here
@@ -639,8 +756,8 @@ public class FastTrackTool extends Tool implements BarrierListener<FTBarrierStat
 	}
 
 
-	private final Decoration<ShadowThread, VectorClock> vectorClockForBarrierEntry = 
-			ShadowThread.makeDecoration("FT:barrier", DecorationFactory.Type.MULTIPLE, new NullDefault<ShadowThread, VectorClock>());
+	private final Decoration<ShadowThread, VectorClock> vectorClockForBarrierEntry =
+			ShadowThread.makeDecoration("FT:barrier", Type.MULTIPLE, new NullDefault<ShadowThread, VectorClock>());
 
 	public void preDoBarrier(BarrierEvent<FTBarrierState> event) {
 		final ShadowThread st = event.getThread();
@@ -755,6 +872,23 @@ public class FastTrackTool extends Tool implements BarrierListener<FTBarrierStat
 
 		if (!fieldErrors.stillLooking(fd)) {
 			advance(fae);
+		}
+	}
+
+	private boolean prepareFolder(File f) {
+		if (f.exists()) {
+			if (!f.isDirectory() || !f.canWrite()) {
+				return false;
+			} else {
+				for (File file : f.listFiles()) {
+					if (!file.delete()) {
+						return false;
+					}
+				}
+				return true;
+			}
+		} else {
+			return f.mkdir();
 		}
 	}
 }
