@@ -8,6 +8,8 @@ import balok.ser.SerializedFrame;
 import balok.ser.SerializedFrameBuilder;
 import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.io.Output;
+import net.jpountz.lz4.LZ4BlockOutputStream;
+import net.jpountz.lz4.LZ4FrameOutputStream;
 import org.jctools.queues.MpscUnboundedArrayQueue;
 import rr.meta.SourceLocation;
 import rr.tool.RR;
@@ -50,7 +52,8 @@ public class OutputAccessMemoryTracker implements MemoryTracker {
         this.accessNum = accessNum;
         try {
             File threadLocalLog = new File(folderForLogs, tid + ".log");
-            oOutput = new Output(new GZIPOutputStream(new FileOutputStream(threadLocalLog)));
+            //oOutput = new Output(new GZIPOutputStream(new FileOutputStream(threadLocalLog)));
+            oOutput = new Output(new LZ4BlockOutputStream(new FileOutputStream(threadLocalLog)));
         } catch (FileNotFoundException e) {
             e.printStackTrace();
         } catch (IOException e) {

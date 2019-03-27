@@ -59,6 +59,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 	<property name="kryo.jar" value="${rr.basedir}/jars/kryo-2.24.0.jar" />
 	<property name="objenesis.jar" value="${rr.basedir}/jars/objenesis-2.1.jar" />
 	<property name="minlog.jar" value="${rr.basedir}/jars/minlog-1.2.jar" />
+        <property name="lz4.jar" value="${rr.basedir}/jars/lz4-java-1.5.1.jar" />
 
 	<property name="rr.vmargs" value="-javaagent:${jar.dir}/rragent.jar $$JVM_ARGS" />
 
@@ -73,6 +74,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 		<pathelement location="${kryo.jar}" />
 		<pathelement location="${objenesis.jar}" />
 		<pathelement location="${minlog.jar}" />
+                <pathelement location="${lz4.jar}" />
 	</path>
 
 	<path id="rr.classpath.jar">
@@ -169,7 +171,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 			</manifest>
 		</jar>
 		<echo file="${bin.dir}/${run-script}" append="false" message="#!/bin/bash${line.separator}
-								  RR_TOOLPATH='${cup.jar}:${jflex.jar}:${balok.jar}:${jctools.jar}:${kryo.jar}:${objenesis.jar}:${minlog.jar}' ${line.separator}
+								  RR_TOOLPATH='${cup.jar}:${jflex.jar}:${balok.jar}:${jctools.jar}:${kryo.jar}:${objenesis.jar}:${minlog.jar}:${lz4.jar}' ${line.separator}
 								  ${java.home}/bin/java -version ${line.separator}
 								  ${java.home}/bin/java -Xms4096m -Xmx8192m ${rr.vmargs} -Xbootclasspath/p:${toString:rr.classpath.jar}:$$RR_TOOLPATH ${rr.main} $$*" />
 		<chmod file="${bin.dir}/${run-script}" perm="u+x" />
