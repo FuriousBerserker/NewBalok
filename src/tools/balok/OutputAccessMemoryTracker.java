@@ -56,9 +56,9 @@ public class OutputAccessMemoryTracker implements MemoryTracker {
             oOutput = new Output(new LZ4BlockOutputStream(new FileOutputStream(threadLocalLog)));
         } catch (FileNotFoundException e) {
             e.printStackTrace();
-        } catch (IOException e) {
+        } /*catch (IOException e) {
             e.printStackTrace();
-        }
+        }*/
 //          buffer = new Frame[BUFFER_SIZE];
     }
 
