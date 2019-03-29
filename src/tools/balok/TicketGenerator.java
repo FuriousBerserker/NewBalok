@@ -31,7 +31,8 @@ public class TicketGenerator implements BalokShadowLocation {
         return unsafe.getAndAddInt(this, valueOffset, 1);
     }
 
-    public int getHashCode() {
+    @Override
+    public int hashCode() {
         return this.hashCode;
     }
 

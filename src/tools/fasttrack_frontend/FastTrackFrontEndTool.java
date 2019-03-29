@@ -393,7 +393,7 @@ public class FastTrackFrontEndTool extends Tool implements BarrierListener<FTBar
 					// putShadow() will not update originalShadow when the update succeeds
 					event.putOriginalShadow(newTg);
 					ExclusiveFTState oldEs = (ExclusiveFTState) oldShadow;
-					mem.onLastExclusiveAccess(newTg.getHashCode(), oldEs.isWrite(), oldEs.getEpoch(), newTg.getTicket(), oldEs.getLastTid());
+					mem.onLastExclusiveAccess(newTg.hashCode(), oldEs.isWrite(), oldEs.getEpoch(), newTg.getTicket(), oldEs.getLastTid());
 				} else {
 					newTg = (TicketGenerator)event.getOriginalShadow();
 				}
@@ -542,7 +542,7 @@ public class FastTrackFrontEndTool extends Tool implements BarrierListener<FTBar
 			TicketGenerator tg = (TicketGenerator) shadow;
 			FTMemoryTracker mem = ts_get_FTMemoryTracker(st);
 			VectorClock v = ts_get_V(st);
-			mem.onAccess(tg.getHashCode(), false, v.getValues(), tg.getTicket());
+			mem.onAccess(tg.hashCode(), false, v.getValues(), tg.getTicket());
 			return true;
 		} else {
 			return false;
@@ -649,7 +649,7 @@ public class FastTrackFrontEndTool extends Tool implements BarrierListener<FTBar
 			TicketGenerator tg = (TicketGenerator) shadow;
 			FTMemoryTracker mem = ts_get_FTMemoryTracker(st);
 			VectorClock v = ts_get_V(st);
-			mem.onAccess(tg.getHashCode(), true, v.getValues(), tg.getTicket());
+			mem.onAccess(tg.hashCode(), true, v.getValues(), tg.getTicket());
 			return true;
 		} else {
 			return false;

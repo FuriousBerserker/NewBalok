@@ -71,7 +71,7 @@ public class OutputAccessMemoryTracker implements MemoryTracker {
     public void onLastExclusiveAccess(BalokShadowLocation oldShadow, BalokShadowLocation newShadow) {
         ExclusiveState es = (ExclusiveState)oldShadow;
         TicketGenerator tg = (TicketGenerator)newShadow;
-        currentFrame.add(tg.getHashCode(), es.getMode(), es.getEvent(), TicketGenerator.TICKET_START);
+        currentFrame.add(tg.hashCode(), es.getMode(), es.getEvent(), TicketGenerator.TICKET_START);
         if (currentFrame.isFull()) {
             SerializedFrame<Epoch> frame = currentFrame.build();
             kryo.writeObject(oOutput, frame);
@@ -92,7 +92,7 @@ public class OutputAccessMemoryTracker implements MemoryTracker {
 
         TaskView vc = tracker.createTimestamp();
         TicketGenerator ticketGen = (TicketGenerator)loc;
-        int address = ticketGen.getHashCode();
+        int address = ticketGen.hashCode();
         int ticket = ticketGen.getTicket();
 //        if (RR.unitTestOption.get()) {
 //            vc = new TaskViewForDebug(vc.getLocal(), vc.getCyclic(), info);
