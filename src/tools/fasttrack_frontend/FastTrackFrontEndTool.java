@@ -222,6 +222,7 @@ public class FastTrackFrontEndTool extends Tool implements BarrierListener<FTBar
 			volV.max(ts_get_V(st));
 			return super.makeShadowVar(event);
 		} else {
+			// we treat field initialization as a write
 			ShadowThread st = event.getThread();
 			int tid = st.getTid();
 			int epoch = ts_get_E(st);
@@ -257,6 +258,8 @@ public class FastTrackFrontEndTool extends Tool implements BarrierListener<FTBar
 //        while (RRMain.numRunningThreads() != 0) {
 //
 //        }
+
+		// in case some ShadowThread instances have not terminated
 		for (int tid : tids) {
 			Util.println("Stop FTMemoryTracker for thread " + tid + " before exit");
 			ShadowThread st = ShadowThread.get(tid);
@@ -370,7 +373,7 @@ public class FastTrackFrontEndTool extends Tool implements BarrierListener<FTBar
 					TicketGenerator tg = (TicketGenerator) event.getOriginalShadow();
 					FTMemoryTracker mem = ts_get_FTMemoryTracker(st);
 					VectorClock vc = ts_get_V(st);
-					//mem.onAccess(tg.getHashCode(), event.isWrite(), vc.getValues(), tg.getTicket());
+					mem.onAccess(tg.hashCode(), event.isWrite(), vc.getValues(), tg.getTicket());
 				}
 			} else {
 				// not exclusive access
@@ -393,12 +396,12 @@ public class FastTrackFrontEndTool extends Tool implements BarrierListener<FTBar
 					// putShadow() will not update originalShadow when the update succeeds
 					event.putOriginalShadow(newTg);
 					ExclusiveFTState oldEs = (ExclusiveFTState) oldShadow;
-					mem.onLastExclusiveAccess(newTg.hashCode(), oldEs.isWrite(), oldEs.getEpoch(), newTg.getTicket(), oldEs.getLastTid());
+					mem.onLastExclusiveAccess(newTg.hashCode(), oldEs.isWrite(), oldEs.getEpoch(), TicketGenerator.TICKET_START, oldEs.getLastTid());
 				} else {
 					newTg = (TicketGenerator)event.getOriginalShadow();
 				}
 				VectorClock vc = ts_get_V(st);
-				//mem.onAccess(newTg.getHashCode(), event.isWrite(), vc.getValues(), newTg.getTicket());
+				mem.onAccess(newTg.hashCode(), event.isWrite(), vc.getValues(), newTg.getTicket());
 			}
 		} else {
 			super.access(event);
