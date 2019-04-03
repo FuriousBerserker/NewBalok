@@ -3,6 +3,7 @@ package tools.fasttrack_frontend;
 import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.io.Output;
 import net.jpountz.lz4.LZ4BlockOutputStream;
+import tools.balok.TicketGenerator;
 
 import java.io.File;
 import java.io.FileNotFoundException;
@@ -38,7 +39,7 @@ public class FTMemoryTracker {
         try {
             File threadLocalLog = new File(folderForLogs, tid + ".log");
             //oOutput = new Output(new GZIPOutputStream(new FileOutputStream(threadLocalLog)));
-            oOutput = new Output(new LZ4BlockOutputStream(new FileOutputStream(threadLocalLog)));
+            oOutput = new Output(new LZ4BlockOutputStream(new FileOutputStream(threadLocalLog)), 8192);
         } catch (FileNotFoundException e) {
             e.printStackTrace();
         } /*catch (IOException e) {
@@ -51,7 +52,8 @@ public class FTMemoryTracker {
         this.head = 0;
     }
 
-    public void onAccess(int address, boolean isWrite, int[] event, int ticket) {
+    public void onAccess(boolean isWrite, int[] event, TicketGenerator tg, int tid) {
+        int address = tg.hashCode();
         if (!isWrite) {
             if (containsRead(address)) {
                 return;
@@ -60,7 +62,7 @@ public class FTMemoryTracker {
             }
         }
         int[] copy = Arrays.copyOf(event, event.length);
-        FTSerializedState state = new FTSerializedState(address, isWrite, copy, ticket);
+        FTSerializedState state = new FTSerializedState(address, isWrite, copy, tg.getTicket(), tid);
         kryo.writeObject(oOutput, state);
         accessNum.getAndIncrement();
     }
@@ -68,7 +70,7 @@ public class FTMemoryTracker {
     public void onLastExclusiveAccess(int address, boolean isWrite, int epoch, int ticket, int tid) {
         int[] event = new int[tid + 1];
         event[tid] = epoch;
-        FTSerializedState state = new FTSerializedState(address, isWrite, event, ticket);
+        FTSerializedState state = new FTSerializedState(address, isWrite, event, ticket, tid);
         kryo.writeObject(oOutput, state);
         accessNum.getAndIncrement();
     }

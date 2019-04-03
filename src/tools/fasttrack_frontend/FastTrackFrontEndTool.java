@@ -373,7 +373,7 @@ public class FastTrackFrontEndTool extends Tool implements BarrierListener<FTBar
 					TicketGenerator tg = (TicketGenerator) event.getOriginalShadow();
 					FTMemoryTracker mem = ts_get_FTMemoryTracker(st);
 					VectorClock vc = ts_get_V(st);
-					mem.onAccess(tg.hashCode(), event.isWrite(), vc.getValues(), tg.getTicket());
+					mem.onAccess(event.isWrite(), vc.getValues(), tg, tid);
 				}
 			} else {
 				// not exclusive access
@@ -401,7 +401,7 @@ public class FastTrackFrontEndTool extends Tool implements BarrierListener<FTBar
 					newTg = (TicketGenerator)event.getOriginalShadow();
 				}
 				VectorClock vc = ts_get_V(st);
-				mem.onAccess(newTg.hashCode(), event.isWrite(), vc.getValues(), newTg.getTicket());
+				mem.onAccess(event.isWrite(), vc.getValues(), newTg, tid);
 			}
 		} else {
 			super.access(event);
@@ -545,7 +545,7 @@ public class FastTrackFrontEndTool extends Tool implements BarrierListener<FTBar
 			TicketGenerator tg = (TicketGenerator) shadow;
 			FTMemoryTracker mem = ts_get_FTMemoryTracker(st);
 			VectorClock v = ts_get_V(st);
-			mem.onAccess(tg.hashCode(), false, v.getValues(), tg.getTicket());
+			mem.onAccess(false, v.getValues(), tg, st.getTid());
 			return true;
 		} else {
 			return false;
@@ -652,7 +652,7 @@ public class FastTrackFrontEndTool extends Tool implements BarrierListener<FTBar
 			TicketGenerator tg = (TicketGenerator) shadow;
 			FTMemoryTracker mem = ts_get_FTMemoryTracker(st);
 			VectorClock v = ts_get_V(st);
-			mem.onAccess(tg.hashCode(), true, v.getValues(), tg.getTicket());
+			mem.onAccess(true, v.getValues(), tg, st.getTid());
 			return true;
 		} else {
 			return false;
