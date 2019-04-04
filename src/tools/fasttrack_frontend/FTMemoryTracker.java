@@ -4,6 +4,7 @@ import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.io.Output;
 import net.jpountz.lz4.LZ4BlockOutputStream;
 import tools.balok.TicketGenerator;
+import tools.util.Epoch;
 
 import java.io.File;
 import java.io.FileNotFoundException;
@@ -52,7 +53,7 @@ public class FTMemoryTracker {
         this.head = 0;
     }
 
-    public void onAccess(boolean isWrite, int[] event, TicketGenerator tg, int tid) {
+    public void onAccess(boolean isWrite, int[] event, TicketGenerator tg) {
         int address = tg.hashCode();
         if (!isWrite) {
             if (containsRead(address)) {
@@ -62,15 +63,16 @@ public class FTMemoryTracker {
             }
         }
         int[] copy = Arrays.copyOf(event, event.length);
-        FTSerializedState state = new FTSerializedState(address, isWrite, copy, tg.getTicket(), tid);
+        FTSerializedState state = new FTSerializedState(address, isWrite, copy, tg.getTicket());
         kryo.writeObject(oOutput, state);
         accessNum.getAndIncrement();
     }
 
-    public void onLastExclusiveAccess(int address, boolean isWrite, int epoch, int ticket, int tid) {
-        int[] event = new int[tid + 1];
-        event[tid] = epoch;
-        FTSerializedState state = new FTSerializedState(address, isWrite, event, ticket, tid);
+    public void onLastExclusiveAccess(int address, boolean isWrite, int epoch, int ticket) {
+        int tid = Epoch.tid(epoch);
+        VectorClock vc = new VectorClock(tid + 1);
+        vc.set(tid, epoch);
+        FTSerializedState state = new FTSerializedState(address, isWrite, vc.getValues(), ticket);
         kryo.writeObject(oOutput, state);
         accessNum.getAndIncrement();
     }

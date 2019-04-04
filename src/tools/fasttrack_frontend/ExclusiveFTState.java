@@ -2,6 +2,7 @@ package tools.fasttrack_frontend;
 
 import balok.causality.AccessMode;
 import tools.balok.BalokShadowLocation;
+import tools.util.Epoch;
 
 public class ExclusiveFTState implements BalokShadowLocation {
 
@@ -9,16 +10,13 @@ public class ExclusiveFTState implements BalokShadowLocation {
 
     private boolean isWrite;
 
-    private final int lastTid;
-
-    public ExclusiveFTState(int epoch, boolean isWrite, int lastTid) {
+    public ExclusiveFTState(int epoch, boolean isWrite) {
         this.epoch = epoch;
         this.isWrite = isWrite;
-        this.lastTid = lastTid;
     }
 
     public boolean isExclusive(int tid) {
-        if (lastTid == tid) {
+        if (Epoch.tid(epoch) == tid) {
             return true;
         } else {
             return false;
@@ -31,9 +29,5 @@ public class ExclusiveFTState implements BalokShadowLocation {
 
     public boolean isWrite() {
         return isWrite;
-    }
-
-    public int getLastTid() {
-        return lastTid;
     }
 }

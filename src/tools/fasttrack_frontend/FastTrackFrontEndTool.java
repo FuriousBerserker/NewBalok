@@ -224,9 +224,8 @@ public class FastTrackFrontEndTool extends Tool implements BarrierListener<FTBar
 		} else {
 			// we treat field initialization as a write
 			ShadowThread st = event.getThread();
-			int tid = st.getTid();
 			int epoch = ts_get_E(st);
-			return new ExclusiveFTState(epoch, true, tid);
+			return new ExclusiveFTState(epoch, true);
 		}
 	}
 
@@ -363,17 +362,16 @@ public class FastTrackFrontEndTool extends Tool implements BarrierListener<FTBar
 		if (event.getOriginalShadow() instanceof ExclusiveFTState) {
 			ExclusiveFTState es = (ExclusiveFTState)event.getOriginalShadow();
 			ShadowThread st = event.getThread();
-			int tid = st.getTid();
-			if (es.isExclusive(tid)) {
+			int epoch = ts_get_E(st);
+			if (es.isExclusive(Epoch.tid(epoch))) {
 				// exclusive access
-				int epoch = ts_get_E(st);
-				ExclusiveFTState newEs = new ExclusiveFTState(epoch, event.isWrite(), tid);
+				ExclusiveFTState newEs = new ExclusiveFTState(epoch, event.isWrite());
 				if (!event.putShadow(newEs)) {
 					// fail to update Shadow, not exclusive anymore
 					TicketGenerator tg = (TicketGenerator) event.getOriginalShadow();
 					FTMemoryTracker mem = ts_get_FTMemoryTracker(st);
 					VectorClock vc = ts_get_V(st);
-					mem.onAccess(event.isWrite(), vc.getValues(), tg, tid);
+					mem.onAccess(event.isWrite(), vc.getValues(), tg);
 				}
 			} else {
 				// not exclusive access
@@ -396,12 +394,12 @@ public class FastTrackFrontEndTool extends Tool implements BarrierListener<FTBar
 					// putShadow() will not update originalShadow when the update succeeds
 					event.putOriginalShadow(newTg);
 					ExclusiveFTState oldEs = (ExclusiveFTState) oldShadow;
-					mem.onLastExclusiveAccess(newTg.hashCode(), oldEs.isWrite(), oldEs.getEpoch(), TicketGenerator.TICKET_START, oldEs.getLastTid());
+					mem.onLastExclusiveAccess(newTg.hashCode(), oldEs.isWrite(), oldEs.getEpoch(), TicketGenerator.TICKET_START);
 				} else {
 					newTg = (TicketGenerator)event.getOriginalShadow();
 				}
 				VectorClock vc = ts_get_V(st);
-				mem.onAccess(event.isWrite(), vc.getValues(), newTg, tid);
+				mem.onAccess(event.isWrite(), vc.getValues(), newTg);
 			}
 		} else {
 			super.access(event);
@@ -545,7 +543,7 @@ public class FastTrackFrontEndTool extends Tool implements BarrierListener<FTBar
 			TicketGenerator tg = (TicketGenerator) shadow;
 			FTMemoryTracker mem = ts_get_FTMemoryTracker(st);
 			VectorClock v = ts_get_V(st);
-			mem.onAccess(false, v.getValues(), tg, st.getTid());
+			mem.onAccess(false, v.getValues(), tg);
 			return true;
 		} else {
 			return false;
@@ -652,7 +650,7 @@ public class FastTrackFrontEndTool extends Tool implements BarrierListener<FTBar
 			TicketGenerator tg = (TicketGenerator) shadow;
 			FTMemoryTracker mem = ts_get_FTMemoryTracker(st);
 			VectorClock v = ts_get_V(st);
-			mem.onAccess(true, v.getValues(), tg, st.getTid());
+			mem.onAccess(true, v.getValues(), tg);
 			return true;
 		} else {
 			return false;

@@ -14,7 +14,6 @@ public class FTSerializedStateSerializer extends Serializer<FTSerializedState> {
         output.writeInt(event.length);
         output.writeInts(event);
         output.writeInt(state.getTicket());
-        output.writeInt(state.getTid());
     }
 
     @Override
@@ -24,7 +23,6 @@ public class FTSerializedStateSerializer extends Serializer<FTSerializedState> {
         int eventSize = input.readInt();
         int[] event = input.readInts(eventSize);
         int ticket = input.readInt();
-        int tid = input.readInt();
-        return new FTSerializedState(address, isWrite, event, ticket, tid);
+        return new FTSerializedState(address, isWrite, event, ticket);
     }
 }
