@@ -30,4 +30,10 @@ public class ExclusiveFTState implements BalokShadowLocation {
     public boolean isWrite() {
         return isWrite;
     }
+
+    // need to guarantee atomic invocation
+    public void update(int epoch, boolean isWrite) {
+        this.epoch = epoch;
+        this.isWrite = isWrite;
+    }
 }

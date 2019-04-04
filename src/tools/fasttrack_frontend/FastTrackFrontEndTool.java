@@ -169,6 +169,9 @@ public class FastTrackFrontEndTool extends Tool implements BarrierListener<FTBar
 	protected static FTMemoryTracker ts_get_FTMemoryTracker(ShadowThread st) { Assert.panic("Bad");	return null; }
 	protected static void ts_set_FTMemoryTracker(ShadowThread st, FTMemoryTracker tracker) { Assert.panic("Bad");  }
 
+	// avoid creating ExclusiveFTState instances repeatly in access()
+	protected static ExclusiveFTState ts_get_ES(ShadowThread st) { Assert.panic("Bad");	return null; }
+	protected static void ts_set_ES(ShadowThread st, ExclusiveFTState es) { Assert.panic("Bad");  }
 
 	protected void maxAndIncEpochAndCV(ShadowThread st, VectorClock other, OperationInfo info) {
 		final int tid = st.getTid();
@@ -288,6 +291,7 @@ public class FastTrackFrontEndTool extends Tool implements BarrierListener<FTBar
 			incEpochAndCV(st, null);
 			Util.log("Initial E for " + tid + ": " + Epoch.toString(ts_get_E(st)));
 		}
+		ts_set_ES(st, new ExclusiveFTState(0, true));
 		tids.add(st.getTid());
 		super.create(event);
 
@@ -365,13 +369,18 @@ public class FastTrackFrontEndTool extends Tool implements BarrierListener<FTBar
 			int epoch = ts_get_E(st);
 			if (es.isExclusive(Epoch.tid(epoch))) {
 				// exclusive access
-				ExclusiveFTState newEs = new ExclusiveFTState(epoch, event.isWrite());
+				ExclusiveFTState newEs = ts_get_ES(st);
+				newEs.update(epoch, event.isWrite());
 				if (!event.putShadow(newEs)) {
 					// fail to update Shadow, not exclusive anymore
 					TicketGenerator tg = (TicketGenerator) event.getOriginalShadow();
 					FTMemoryTracker mem = ts_get_FTMemoryTracker(st);
 					VectorClock vc = ts_get_V(st);
 					mem.onAccess(event.isWrite(), vc.getValues(), tg);
+				} else {
+					// might have data race, but doesn't affect correctness, since only TID bits of es.epoch are shared among threads,
+					// and those bits are constant
+					ts_set_ES(st, es);
 				}
 			} else {
 				// not exclusive access
