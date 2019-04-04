@@ -12,6 +12,10 @@ public class FTSerializedState {
 
     private int ticket;
 
+    public FTSerializedState() {
+
+    }
+
     public FTSerializedState(int address, boolean isWrite, int[] event, int ticket) {
         this.address = address;
         this.isWrite = isWrite;
@@ -33,5 +37,12 @@ public class FTSerializedState {
 
     public int getTicket() {
         return ticket;
+    }
+
+    public void update(int address, boolean isWrite, int[] event, int ticket) {
+        this.address = address;
+        this.isWrite = isWrite;
+        this.event = event;
+        this.ticket = ticket;
     }
 }

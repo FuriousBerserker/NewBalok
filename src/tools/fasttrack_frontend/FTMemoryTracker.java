@@ -33,6 +33,10 @@ public class FTMemoryTracker {
 
     private int head;
 
+    private FTSerializedState wrapper = new FTSerializedState();
+
+    private VectorClock vcForEpoch = new VectorClock();
+
     public FTMemoryTracker(Kryo kryo, File folderForLogs, AtomicLong accessNum, final int tid) {
         this.kryo = kryo;
         this.folderForLogs = folderForLogs;
@@ -62,18 +66,19 @@ public class FTMemoryTracker {
                 cacheRead(address);
             }
         }
-        int[] copy = Arrays.copyOf(event, event.length);
-        FTSerializedState state = new FTSerializedState(address, isWrite, copy, tg.getTicket());
-        kryo.writeObject(oOutput, state);
+        //int[] copy = Arrays.copyOf(event, event.length);
+        wrapper.update(address, isWrite, event, tg.getTicket());
+        kryo.writeObject(oOutput, wrapper);
         accessNum.getAndIncrement();
     }
 
     public void onLastExclusiveAccess(int address, boolean isWrite, int epoch, int ticket) {
         int tid = Epoch.tid(epoch);
-        VectorClock vc = new VectorClock(tid + 1);
-        vc.set(tid, epoch);
-        FTSerializedState state = new FTSerializedState(address, isWrite, vc.getValues(), ticket);
-        kryo.writeObject(oOutput, state);
+        //VectorClock vc = new VectorClock(tid + 1);
+        vcForEpoch.set(tid, epoch);
+        wrapper.update(address, isWrite, vcForEpoch.getValues(), ticket);
+        kryo.writeObject(oOutput, wrapper);
+        vcForEpoch.set(tid, Epoch.make(tid, 0));
         accessNum.getAndIncrement();
     }
 

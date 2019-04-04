@@ -23,7 +23,7 @@ public class TicketGenerator implements BalokShadowLocation {
         } catch (Exception ex) { throw new Error(ex); }
     }
 
-    private final int hashCode = hashCodeGen.getAndIncrement();
+    private volatile int hashCode = hashCodeGen.getAndIncrement();
 
     private volatile int ticketGen = TICKET_START + 1;
 
