@@ -367,7 +367,8 @@ public class FastTrackFrontEndTool extends Tool implements BarrierListener<FTBar
 			ExclusiveFTState es = (ExclusiveFTState)event.getOriginalShadow();
 			ShadowThread st = event.getThread();
 			int epoch = ts_get_E(st);
-			if (es.isExclusive(Epoch.tid(epoch))) {
+			int tid = Epoch.tid(epoch);
+			if (es.isExclusive(tid)) {
 				// exclusive access
 				ExclusiveFTState newEs = ts_get_ES(st);
 				newEs.update(epoch, event.isWrite());
@@ -376,7 +377,7 @@ public class FastTrackFrontEndTool extends Tool implements BarrierListener<FTBar
 					TicketGenerator tg = (TicketGenerator) event.getOriginalShadow();
 					FTMemoryTracker mem = ts_get_FTMemoryTracker(st);
 					VectorClock vc = ts_get_V(st);
-					mem.onAccess(event.isWrite(), vc.getValues(), tg);
+					mem.onAccess(event.isWrite(), vc.getValues(), tg, tid);
 				} else {
 					// might have data race, but doesn't affect correctness, since only TID bits of es.epoch are shared among threads,
 					// and those bits are constant
@@ -408,7 +409,7 @@ public class FastTrackFrontEndTool extends Tool implements BarrierListener<FTBar
 					newTg = (TicketGenerator)event.getOriginalShadow();
 				}
 				VectorClock vc = ts_get_V(st);
-				mem.onAccess(event.isWrite(), vc.getValues(), newTg);
+				mem.onAccess(event.isWrite(), vc.getValues(), newTg, tid);
 			}
 		} else {
 			super.access(event);
@@ -552,7 +553,7 @@ public class FastTrackFrontEndTool extends Tool implements BarrierListener<FTBar
 			TicketGenerator tg = (TicketGenerator) shadow;
 			FTMemoryTracker mem = ts_get_FTMemoryTracker(st);
 			VectorClock v = ts_get_V(st);
-			mem.onAccess(false, v.getValues(), tg);
+			mem.onAccess(false, v.getValues(), tg, st.getTid());
 			return true;
 		} else {
 			return false;
@@ -659,7 +660,7 @@ public class FastTrackFrontEndTool extends Tool implements BarrierListener<FTBar
 			TicketGenerator tg = (TicketGenerator) shadow;
 			FTMemoryTracker mem = ts_get_FTMemoryTracker(st);
 			VectorClock v = ts_get_V(st);
-			mem.onAccess(true, v.getValues(), tg);
+			mem.onAccess(true, v.getValues(), tg, st.getTid());
 			return true;
 		} else {
 			return false;

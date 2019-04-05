@@ -12,15 +12,18 @@ public class FTSerializedState {
 
     private int ticket;
 
+    private int tid;
+
     public FTSerializedState() {
 
     }
 
-    public FTSerializedState(int address, boolean isWrite, int[] event, int ticket) {
+    public FTSerializedState(int address, boolean isWrite, int[] event, int ticket, int tid) {
         this.address = address;
         this.isWrite = isWrite;
         this.event = event;
         this.ticket = ticket;
+        this.tid = tid;
     }
 
     public int getAddress() {
@@ -39,10 +42,15 @@ public class FTSerializedState {
         return ticket;
     }
 
-    public void update(int address, boolean isWrite, int[] event, int ticket) {
+    public int getTid() {
+        return tid;
+    }
+
+    public void update(int address, boolean isWrite, int[] event, int ticket, int tid) {
         this.address = address;
         this.isWrite = isWrite;
         this.event = event;
         this.ticket = ticket;
+        this.tid = tid;
     }
 }

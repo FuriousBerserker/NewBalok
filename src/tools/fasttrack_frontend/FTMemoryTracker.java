@@ -57,7 +57,7 @@ public class FTMemoryTracker {
         this.head = 0;
     }
 
-    public void onAccess(boolean isWrite, int[] event, TicketGenerator tg) {
+    public void onAccess(boolean isWrite, int[] event, TicketGenerator tg, int tid) {
         int address = tg.hashCode();
         if (!isWrite) {
             if (containsRead(address)) {
@@ -67,7 +67,7 @@ public class FTMemoryTracker {
             }
         }
         //int[] copy = Arrays.copyOf(event, event.length);
-        wrapper.update(address, isWrite, event, tg.getTicket());
+        wrapper.update(address, isWrite, event, tg.getTicket(), tid);
         kryo.writeObject(oOutput, wrapper);
         accessNum.getAndIncrement();
     }
@@ -76,7 +76,7 @@ public class FTMemoryTracker {
         int tid = Epoch.tid(epoch);
         //VectorClock vc = new VectorClock(tid + 1);
         vcForEpoch.set(tid, epoch);
-        wrapper.update(address, isWrite, vcForEpoch.getValues(), ticket);
+        wrapper.update(address, isWrite, vcForEpoch.getValues(), ticket, tid);
         kryo.writeObject(oOutput, wrapper);
         vcForEpoch.set(tid, Epoch.make(tid, 0));
         accessNum.getAndIncrement();
