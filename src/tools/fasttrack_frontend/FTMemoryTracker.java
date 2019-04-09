@@ -1,5 +1,6 @@
 package tools.fasttrack_frontend;
 
+import com.carrotsearch.hppc.IntHashSet;
 import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.io.Output;
 import net.jpountz.lz4.LZ4BlockOutputStream;
@@ -25,7 +26,9 @@ public class FTMemoryTracker {
 
     private static int CACHE_SIZE = 100000;
 
-    private HashSet<Integer> reads;
+    private IntHashSet reads;
+
+    //private HashSet<Integer> reads;
 
     private int[] readsOrder;
 
@@ -51,7 +54,8 @@ public class FTMemoryTracker {
             e.printStackTrace();
         }*/
 
-        this.reads = new HashSet();
+        this.reads = new IntHashSet();
+        //this.reads = new HashSet<>();
         this.readsOrder = new int[CACHE_SIZE + 1];
         this.tail = 0;
         this.head = 0;
